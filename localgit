@@ -22,17 +22,17 @@ debug=1
 # Enable shell tracing if debug mode set.
 tron()
 {
-	if (( $debug > 0 )); then
-		set -x
-	fi
+    if (( $debug > 0 )); then
+        set -x
+    fi
 }
 
 # Disable shell tracing if debug mode set.
 troff()
 {
-	if (( $debug > 0 )); then
-		set +x
-	fi
+    if (( $debug > 0 )); then
+        set +x
+    fi
 }
 
 ##############################################################################
@@ -41,20 +41,20 @@ troff()
 
 error()
 {
-	echo 1>&2 "$progname: $*"
-	exit 1
+    echo 1>&2 "$progname: $*"
+    exit 1
 }
 
 usage()
 {
-	local code=0
-	if [[ -n "$*" ]]; then
-		printf 1>&2 "$progname: $*\n\n"
-		code=1
-	fi
-	printf 1>&2 "usage: $progname cmd args\n\n"
-	printf 1>&2 "The supported commands are:\n\n$commands"
-	exit $code
+    local code=0
+    if [[ -n "$*" ]]; then
+        printf 1>&2 "$progname: $*\n\n"
+        code=1
+    fi
+    printf 1>&2 "usage: $progname cmd args\n\n"
+    printf 1>&2 "The supported commands are:\n\n$commands"
+    exit $code
 }
 
 ##############################################################################
@@ -63,27 +63,27 @@ usage()
 
 expect_topic()
 {
-	if [[ "$(current_branch)" == "master" ]]; then
-		error "should be in topic branch but in master"
-	fi
+    if [[ "$(current_branch)" == "master" ]]; then
+        error "should be in topic branch but in master"
+    fi
 }
 
 expect_master()
 {
-	if [[ "$(current_branch)" != "master" ]]; then
-		error "should be in master branch but in $(current_branch)"
-	fi
+    if [[ "$(current_branch)" != "master" ]]; then
+        error "should be in master branch but in $(current_branch)"
+    fi
 }
 
 current_branch()
 {
-	git branch | grep '^\*' | cut -d' ' -f2
+    git branch | grep '^\*' | cut -d' ' -f2
 }
 
 # Print all files in repo.
 all_files()
 {
-	git ls-tree --full-tree -r master | awk '{print $4}' | grep -vw .lg
+    git ls-tree --full-tree -r master | awk '{print $4}' | grep -vw .lg
 }
 
 ##############################################################################
@@ -94,27 +94,27 @@ commands="${commands}init - create local git\n"
 
 do_init()
 {
-	local gitroot="$1"
-	if [[ -n "$gitroot" ]]; then
-		local parent="$(dirname $gitroot)"
-		[[ -d "$parent" ]] || error "directory not found: $parent"
-		[[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
-		pushd "$parent"
-	fi
+    local gitroot="$1"
+    if [[ -n "$gitroot" ]]; then
+        local parent="$(dirname $gitroot)"
+        [[ -d "$parent" ]] || error "directory not found: $parent"
+        [[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
+        pushd "$parent"
+    fi
 
-	tron
+    tron
 
-	git init
+    git init
 
-	# Create dummy initial commit.
-	# Failing this initial lg-import from orphan topic branch fails.
-	git commit --allow-empty -m 'lg: big bang'
+    # Create dummy initial commit.
+    # Failing this initial lg-import from orphan topic branch fails.
+    git commit --allow-empty -m 'lg: big bang'
 
-	if [[ -n "$gitroot" ]]; then
-		mv .git $(basename $gitroot)
-		popd
-		ln -s "$gitroot" .git
-	fi
+    if [[ -n "$gitroot" ]]; then
+        mv .git $(basename $gitroot)
+        popd
+        ln -s "$gitroot" .git
+    fi
 }
 
 ##############################################################################
@@ -125,33 +125,33 @@ commands="${commands}import - add file to local git\n"
 
 do_import()
 {
-	# Error out if some files do not exist or are already baselined.
-	local f
-	for f in $*; do
-		[[ -f "$f" ]] || error "missing file: $f"
-		if echo $(all_files) | grep -q -w "$f"; then
-			error>&2 "file already baselined: $f"
-		fi
-	done
+    # Error out if some files do not exist or are already baselined.
+    local f
+    for f in $*; do
+        [[ -f "$f" ]] || error "missing file: $f"
+        if echo $(all_files) | grep -q -w "$f"; then
+            error>&2 "file already baselined: $f"
+        fi
+    done
 
-	expect_topic
+    expect_topic
 
     local topic=$(current_branch)
-	tron
+    tron
 
-	git stash save lg-import: "$*"
+    git stash save lg-import: "$*"
 
-	git checkout master
+    git checkout master
 
-	git add $*
+    git add $*
 
-	git commit -m "lg: import"
+    git commit -m "lg: import"
 
-	git checkout "$topic"
+    git checkout "$topic"
 
-	git rebase master
+    git rebase master
 
-	git stash pop
+    git stash pop
 }
 
 ##############################################################################
@@ -162,18 +162,18 @@ commands="${commands}sync - rebase local master branch after sync'ing from remot
 
 do_sync()
 {
-	expect_master
+    expect_master
 
-	local msg="lg: sync"
-	if [[ -n "$*" ]]; then
-		msg="$msg: $*"
-	fi
+    local msg="lg: sync"
+    if [[ -n "$*" ]]; then
+        msg="$msg: $*"
+    fi
 
-	tron
+    tron
 
-	git add $(all_files)
+    git add $(all_files)
 
-	git commit -m "$msg"
+    git commit -m "$msg"
 }
 
 ##############################################################################
@@ -184,7 +184,7 @@ commands="${commands}status - print status of files in local branches\n"
 
 do_status()
 {
-	git status -uno
+    git status -uno
 }
 
 ##############################################################################
@@ -195,8 +195,8 @@ commands="${commands}log - run git log on local topic branch excluding local mas
 
 do_log()
 {
-	expect_topic
-	git log master.. $*
+    expect_topic
+    git log master.. $*
 }
 
 ##############################################################################
@@ -207,12 +207,12 @@ commands="${commands}files - print files in local topic branch\n"
 
 do_files()
 {
-	expect_topic
-	local rev="$*"
-	if [[ -z "$rev" ]]; then
-		rev="master...HEAD"
-	fi
-	git diff --stat "$rev" | awk '$2 == "|" { print $1 }'
+    expect_topic
+    local rev="$*"
+    if [[ -z "$rev" ]]; then
+        rev="master...HEAD"
+    fi
+    git diff --stat "$rev" | awk '$2 == "|" { print $1 }'
 }
 
 ##############################################################################
@@ -225,12 +225,12 @@ cmd=$1
 shift
 
 case "$cmd" in
-init)		do_init $* ;;
-i|import)	do_import $* ;;
-sync)		do_sync $* ;;
-s|status)	do_status $* ;;
-f|files)	do_files $* ;;
-log)		do_log $* ;;
-help)		usage ;;
-*)		usage "unknown command: $cmd" ;;
+init)       do_init $* ;;
+i|import)   do_import $* ;;
+sync)       do_sync $* ;;
+s|status)   do_status $* ;;
+f|files)    do_files $* ;;
+log)        do_log $* ;;
+help)       usage ;;
+*)          usage "unknown command: $cmd" ;;
 esac
