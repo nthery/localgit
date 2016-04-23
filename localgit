@@ -95,13 +95,26 @@ commands="${commands}init - create local git\n"
 
 do_init()
 {
-    local gitroot="$1"
+    local opt
+    local gitroot
+    while getopts ":r:" opt; do
+        case $opt in
+            r) gitroot="$OPTARG" ;;
+            :) error "option $OPTARG: missing argument" ;;
+            *) error "bad option: $OPTARG" ;;
+        esac
+    done
+
+    shift $(( $OPTIND - 1 ))
+
     if [[ -n "$gitroot" ]]; then
         local parent="$(dirname $gitroot)"
         [[ -d "$parent" ]] || error "directory not found: $parent"
         [[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
         pushd "$parent"
     fi
+
+    [[ ! -d .git ]] || error "directory already exists: .git"
 
     tron
 
@@ -224,10 +237,22 @@ commands="${commands}clone - clone local git repo into another existing source t
 
 do_clone()
 {
+    local opt
+    local dst
+    while getopts ":r:" opt; do
+        case $opt in
+            r) dst="$OPTARG" ;;
+            :) error "option $OPTARG: missing argument" ;;
+            *) error "bad option: $OPTARG" ;;
+        esac
+    done
+
+    shift $(( $OPTIND - 1 ))
+
     local src="$1"
+    [[ -n "$src" ]] || error "missing source repo"
     [[ -d "$src" ]] || error "source git repo does not exist: $src"
 
-    local dst="$2"
     if [[ -n "$dst" ]]; then
         local parent="$(dirname $dst)"
         [[ -d "$parent" ]] || error "directory not found: $parent"
@@ -262,13 +287,13 @@ cmd=$1
 shift
 
 case "$cmd" in
-init)       do_init $* ;;
-i|import)   do_import $* ;;
-sync)       do_sync $* ;;
-s|status)   do_status $* ;;
-f|files)    do_files $* ;;
-log)        do_log $* ;;
-clone)      do_clone $* ;;
-help)       usage ;;
-*)          usage "unknown command: $cmd" ;;
+    init)       do_init $* ;;
+    i|import)   do_import $* ;;
+    sync)       do_sync $* ;;
+    s|status)   do_status $* ;;
+    f|files)    do_files $* ;;
+    log)        do_log $* ;;
+    clone)      do_clone $* ;;
+    help)       usage ;;
+    *)          usage "unknown command: $cmd" ;;
 esac
