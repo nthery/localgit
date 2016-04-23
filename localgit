@@ -136,6 +136,7 @@ do_import()
 
 	expect_topic
 
+    local topic=$(current_branch)
 	tron
 
 	git stash save lg-import: "$*"
@@ -146,7 +147,7 @@ do_import()
 
 	git commit -m "lg: import"
 
-	git checkout "$(current_branch)"
+	git checkout "$topic"
 
 	git rebase master
 
