@@ -217,6 +217,42 @@ do_files()
 }
 
 ##############################################################################
+# clone command
+##############################################################################
+
+commands="${commands}clone - clone local git repo into another existing source tree\n"
+
+do_clone()
+{
+    local src="$1"
+    [[ -d "$src" ]] || error "source git repo does not exist: $src"
+
+    local dst="$2"
+    if [[ -n "$dst" ]]; then
+        local parent="$(dirname $dst)"
+        [[ -d "$parent" ]] || error "directory not found: $parent"
+        [[ ! -d "$dst" ]] || error "directory already exists: $dst"
+        pushd "$parent"
+    fi
+
+    tron
+
+    git init
+
+    if [[ -n "$dst" ]]; then
+        mv .git $(basename $dst)
+        popd
+        ln -s "$dst" .git
+    fi
+
+    git remote add origin "$src"
+    git fetch
+
+    # Sync local master branch with remote one leaving local changes unmodified.
+    git reset origin/master
+}
+
+##############################################################################
 # MAIN PROGRAM
 ##############################################################################
 
@@ -232,6 +268,7 @@ sync)       do_sync $* ;;
 s|status)   do_status $* ;;
 f|files)    do_files $* ;;
 log)        do_log $* ;;
+clone)      do_clone $* ;;
 help)       usage ;;
 *)          usage "unknown command: $cmd" ;;
 esac
