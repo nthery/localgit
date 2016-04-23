@@ -108,9 +108,7 @@ do_init()
 
 	# Create dummy initial commit.
 	# Failing this initial lg-import from orphan topic branch fails.
-	touch .lg
-	git add .lg
-	git ci -m 'lg: big bang'
+	git commit --allow-empty -m 'lg: big bang'
 
 	if [[ -n "$gitroot" ]]; then
 		mv .git $(basename $gitroot)
@@ -174,7 +172,7 @@ do_sync()
 
 	git add $(all_files)
 
-	git ci -m "$msg"
+	git commit -m "$msg"
 }
 
 ##############################################################################
