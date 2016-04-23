@@ -97,9 +97,11 @@ do_init()
 {
     local opt
     local gitroot
-    while getopts ":r:" opt; do
+    local topic_branch
+    while getopts ":r:b:" opt; do
         case $opt in
             r) gitroot="$OPTARG" ;;
+            b) topic_branch="$OPTARG" ;;
             :) error "option $OPTARG: missing argument" ;;
             *) error "bad option: $OPTARG" ;;
         esac
@@ -128,6 +130,10 @@ do_init()
         mv .git $(basename $gitroot)
         popd
         ln -s "$gitroot" .git
+    fi
+
+    if [[ -n "$topic_branch" ]]; then
+        git checkout -b "$topic_branch"
     fi
 }
 
