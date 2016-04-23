@@ -63,6 +63,18 @@ commit in the other SCM.
     $ lg files
     f1
 
+After checking out a new workspace from the other SCM, you can clone an
+existing local git repo in this new workspace.
+
+    $ pwd
+    my/workspace/managed/by/another/scm
+    $ ... check out new workspace in another/workspace
+    $ cd another/workspace
+    $ lg clone my/workspace/managed/by/another/scm/.git
+
+`lg clone` leaves local modifications unchanged.  They can be integrated with
+`lg sync`.
+
 ## Under the hood
 
 `lg import` first creates a commit in the master branch that adds the specified
