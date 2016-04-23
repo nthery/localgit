@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vim: ts=8 sts=4 sw=4 et ft=sh
 
 # Copyright (c) 2016, Nicolas Thery (nthery@gmail.com)
 #
