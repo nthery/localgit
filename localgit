@@ -9,7 +9,7 @@
 # Bail out early if a command exits abnormally.
 set -e
 
-progname=$(basename $0)
+progname=$(basename "$0")
 
 commands=""
 
@@ -23,7 +23,7 @@ debug=1
 # Enable shell tracing if debug mode set.
 tron()
 {
-    if (( $debug > 0 )); then
+    if (( debug > 0 )); then
         set -x
     fi
 }
@@ -31,7 +31,7 @@ tron()
 # Disable shell tracing if debug mode set.
 troff()
 {
-    if (( $debug > 0 )); then
+    if (( debug > 0 )); then
         set +x
     fi
 }
@@ -50,11 +50,12 @@ usage()
 {
     local code=0
     if [[ -n "$*" ]]; then
-        printf 1>&2 "$progname: $*\n\n"
+        echo -e 1>&2 "$progname: $*\n"
         code=1
     fi
-    printf 1>&2 "usage: $progname cmd args\n\n"
-    printf 1>&2 "The supported commands are:\n\n$commands"
+    echo -e 1>&2 "usage: $progname cmd args\n"
+    echo -e 1>&2 "The supported commands are:\n"
+    echo -e 1>&2 "$commands"
     exit $code
 }
 
@@ -107,10 +108,10 @@ do_init()
         esac
     done
 
-    shift $(( $OPTIND - 1 ))
+    shift $(( OPTIND - 1 ))
 
     if [[ -n "$gitroot" ]]; then
-        local parent="$(dirname $gitroot)"
+        local -r parent="$(dirname "$gitroot")"
         [[ -d "$parent" ]] || error "directory not found: $parent"
         [[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
         pushd "$parent"
@@ -127,7 +128,7 @@ do_init()
     git commit --allow-empty -m 'lg: big bang'
 
     if [[ -n "$gitroot" ]]; then
-        mv .git $(basename $gitroot)
+        mv .git "$(basename "$gitroot")"
         popd
         ln -s "$gitroot" .git
     fi
@@ -147,23 +148,23 @@ do_import()
 {
     # Error out if some files do not exist or are already baselined.
     local f
-    for f in $*; do
+    for f in "$@"; do
         [[ -f "$f" ]] || error "missing file: $f"
-        if echo $(all_files) | grep -q -w "$f"; then
+        if all_files | grep -q -w "$f"; then
             error>&2 "file already baselined: $f"
         fi
     done
 
     expect_topic
 
-    local topic=$(current_branch)
+    local -r topic=$(current_branch)
     tron
 
     git stash save lg-import: "$*"
 
     git checkout master
 
-    git add $*
+    git add "$@"
 
     git commit -m "lg: import"
 
@@ -216,7 +217,7 @@ commands="${commands}log - run git log on local topic branch excluding local mas
 do_log()
 {
     expect_topic
-    git log master.. $*
+    git log master.. "$@"
 }
 
 ##############################################################################
@@ -253,14 +254,14 @@ do_clone()
         esac
     done
 
-    shift $(( $OPTIND - 1 ))
+    shift $(( OPTIND - 1 ))
 
     local src="$1"
     [[ -n "$src" ]] || error "missing source repo"
     [[ -d "$src" ]] || error "source git repo does not exist: $src"
 
     if [[ -n "$dst" ]]; then
-        local parent="$(dirname $dst)"
+        local -r parent="$(dirname "$dst")"
         [[ -d "$parent" ]] || error "directory not found: $parent"
         [[ ! -d "$dst" ]] || error "directory already exists: $dst"
         pushd "$parent"
@@ -271,7 +272,7 @@ do_clone()
     git init
 
     if [[ -n "$dst" ]]; then
-        mv .git $(basename $dst)
+        mv .git "$(basename "$dst")"
         popd
         ln -s "$dst" .git
     fi
@@ -293,13 +294,13 @@ cmd=$1
 shift
 
 case "$cmd" in
-    init)       do_init $* ;;
-    i|import)   do_import $* ;;
-    sync)       do_sync $* ;;
-    s|status)   do_status $* ;;
-    f|files)    do_files $* ;;
-    log)        do_log $* ;;
-    clone)      do_clone $* ;;
+    init)       do_init "$@" ;;
+    i|import)   do_import "$@" ;;
+    sync)       do_sync "$@" ;;
+    s|status)   do_status "$@" ;;
+    f|files)    do_files "$@" ;;
+    log)        do_log "$@" ;;
+    clone)      do_clone "$@" ;;
     help)       usage ;;
     *)          usage "unknown command: $cmd" ;;
 esac
