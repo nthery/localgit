@@ -88,6 +88,29 @@ all_files()
     git ls-tree --full-tree -r master | awk '{print $4}' | grep -vw .lg
 }
 
+start_non_local_git_root_creation()
+{
+    local -r gitroot="$1"
+
+    if [[ -n "$gitroot" ]]; then
+        local -r parent="$(dirname "$gitroot")"
+        [[ -d "$parent" ]] || error "directory not found: $parent"
+        [[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
+        pushd "$parent"
+    fi
+}
+
+complete_non_local_git_root_creation()
+{
+    local -r gitroot="$1"
+
+    if [[ -n "$gitroot" ]]; then
+        mv .git "$(basename "$gitroot")"
+        popd
+        ln -s "$gitroot" .git
+    fi
+}
+
 ##############################################################################
 # init command
 ##############################################################################
@@ -110,14 +133,9 @@ do_init()
 
     shift $(( OPTIND - 1 ))
 
-    if [[ -n "$gitroot" ]]; then
-        local -r parent="$(dirname "$gitroot")"
-        [[ -d "$parent" ]] || error "directory not found: $parent"
-        [[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
-        pushd "$parent"
-    fi
-
     [[ ! -d .git ]] || error "directory already exists: .git"
+
+    start_non_local_git_root_creation "$gitroot"
 
     tron
 
@@ -127,11 +145,7 @@ do_init()
     # Failing this initial lg-import from orphan topic branch fails.
     git commit --allow-empty -m 'lg: big bang'
 
-    if [[ -n "$gitroot" ]]; then
-        mv .git "$(basename "$gitroot")"
-        popd
-        ln -s "$gitroot" .git
-    fi
+    complete_non_local_git_root_creation "$gitroot"
 
     if [[ -n "$topic_branch" ]]; then
         git checkout -b "$topic_branch"
@@ -260,22 +274,13 @@ do_clone()
     [[ -n "$src" ]] || error "missing source repo"
     [[ -d "$src" ]] || error "source git repo does not exist: $src"
 
-    if [[ -n "$dst" ]]; then
-        local -r parent="$(dirname "$dst")"
-        [[ -d "$parent" ]] || error "directory not found: $parent"
-        [[ ! -d "$dst" ]] || error "directory already exists: $dst"
-        pushd "$parent"
-    fi
+    start_non_local_git_root_creation "$dst"
 
     tron
 
     git init
 
-    if [[ -n "$dst" ]]; then
-        mv .git "$(basename "$dst")"
-        popd
-        ln -s "$dst" .git
-    fi
+    complete_non_local_git_root_creation "$dst"
 
     git remote add origin "$src"
     git fetch
