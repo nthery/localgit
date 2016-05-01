@@ -108,7 +108,7 @@ complete_non_local_git_root_creation()
         mv .git "$(basename "$gitroot")"
         popd
         git --git-dir "$gitroot" config core.worktree "$(pwd)"
-        echo "gitdir: $(realpath $gitroot)" > .git
+        echo "gitdir: $(realpath "$gitroot")" > .git
     fi
 }
 
