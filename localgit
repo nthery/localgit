@@ -173,6 +173,22 @@ do_import()
     expect_topic
 
     local -r topic=$(current_branch)
+
+    local log="lg: import $*"
+
+    # If commit log too long to fit in 80 columns, first strip directories.
+    if (( ${#log} > (80 - 3) )); then
+        log="lg: import"
+        for f in "$@"; do
+            log="$log $(basename $f)"
+        done
+    fi
+
+    # If log still too long, truncate it.
+    if (( ${#log} > (80 - 3) )); then
+        log="${log:0:76}..."
+    fi
+
     tron
 
     git stash save lg-import: "$*"
@@ -181,7 +197,7 @@ do_import()
 
     git add "$@"
 
-    git commit -m "lg: import"
+    git commit -m "$log"
 
     git checkout "$topic"
 
