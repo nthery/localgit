@@ -248,7 +248,14 @@ do_files()
     if [[ -z "$rev" ]]; then
         rev="master...HEAD"
     fi
-    git diff --stat "$rev" | awk '$2 == "|" { print $1 }'
+
+    git diff "$rev" | awk '
+        function flush(action) { if (file != "") { print action, file; file = "" } }
+        /^diff/ { flush("edit"); file = substr($3, 3) }
+        /^new file/ { flush("add") }
+        /^deleted file/ { flush("rm") }
+        END { flush("edit") }
+        '
 }
 
 ##############################################################################

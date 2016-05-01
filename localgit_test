@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+# Copyright (c) 2016, Nicolas Thery (nthery@gmail.com)
+# vim: ts=8 sts=4 sw=4 et ft=sh
+
+#
+# localgit test suite
+#
+
+# set -x
+set -e
+
+source test_lib.bash
+
+readonly lg_bin="$(pwd)/localgit"
+[[ -x "$lg_bin" ]] || error "must run from localgit root"
+
+lg()
+{
+    "$lg_bin" "$@"
+}
+
+test_lg_files_prints_added_edited_removed_files()
+{
+    touch a b
+    lg init -b topic
+
+    lg import a
+    echo AAA > a
+    git commit -am 'edit a'
+
+    lg import b
+    git rm b
+    git commit -am 'rm b'
+
+    touch c
+    git add c
+    git commit -am 'add c'
+
+    lg files > lg_files.out
+    assert "(( $(wc -l <lg_files.out) == 3 ))"
+    assert "grep '^edit a$' lg_files.out"
+    assert "grep '^rm b$' lg_files.out"
+    assert "grep '^add c$' lg_files.out"
+}
+
+run_all_tests

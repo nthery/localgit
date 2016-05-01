@@ -61,7 +61,7 @@ Listing all files in topic branch may be useful for example for preparing a
 commit in the other SCM.
 
     $ lg files
-    f1
+    edit f1
 
 After checking out a new workspace from the other SCM, you can clone an
 existing local git repo in this new workspace.
