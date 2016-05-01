@@ -47,8 +47,7 @@ end_test()
 assert()
 {
     local -r cmd="$1"
-    eval "$cmd" || error "FAILURE: command [$cmd] returned $?"
-
+    eval "$cmd" || error "FAILURE: $test_name: command [$cmd] returned $?"
 }
 
 # Execute all test functions in "test" subdirectory.
@@ -69,7 +68,7 @@ run_all_tests()
     pushd "$test_root"
 
     grep '^test_[a-z0-9_]*()$' "$fullprogname" | while read -r test_fn; do
-        test_name="${test_fn/()}"
+        export test_name="${test_fn/()}"
         start_test "$test_name"
         eval "$test_name"
         end_test "$test_name"
