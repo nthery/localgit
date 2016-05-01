@@ -59,8 +59,18 @@ assert()
 # subdirectory is deleted on success but left on failure for debugging.
 run_tests()
 {
+    local opt
+    while getopts ":x" opt; do
+        case $opt in
+            x) set -x ;;
+            *) error "bad option: $OPTARG" ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+
     local  test_re="$1"
     [[ -z "$test_re" ]] && test_re='^test_[a-z0-9_]*()$'
+
     local -r test_root="$(pwd)/test"
 
     rm -rf "$test_root" || true
