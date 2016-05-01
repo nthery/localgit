@@ -50,16 +50,17 @@ assert()
     eval "$cmd" || error "FAILURE: $test_name: command [$cmd] returned $?"
 }
 
-# Execute all test functions in "test" subdirectory.
-# 
-# The "test" subdirectory is deleted on success but left on failure for
-# debugging.
+# Execute test functions matching specified regex.
 #
-# A test function is a bash function defined with "test_foo_bar()".  It must
-# start with "test_" and contain only lowercase characters, digits and
-# underscores.
-run_all_tests()
+# When there is no argument, execute all functions starting with "test_" and
+# containing only lowercase characters, digits and underscores.
+#
+# Creates "test" subdirectory and run test functions there.  The "test"
+# subdirectory is deleted on success but left on failure for debugging.
+run_tests()
 {
+    local  test_re="$1"
+    [[ -z "$test_re" ]] && test_re='^test_[a-z0-9_]*()$'
     local -r test_root="$(pwd)/test"
 
     rm -rf "$test_root" || true
@@ -67,7 +68,7 @@ run_all_tests()
 
     pushd "$test_root"
 
-    grep '^test_[a-z0-9_]*()$' "$fullprogname" | while read -r test_fn; do
+    grep "$test_re" "$fullprogname" | while read -r test_fn; do
         export test_name="${test_fn/()}"
         start_test "$test_name"
         eval "$test_name"

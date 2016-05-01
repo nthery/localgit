@@ -44,4 +44,4 @@ test_lg_files_prints_added_edited_removed_files()
     assert "grep '^add c$' lg_files.out"
 }
 
-run_all_tests
+run_tests "$@"
