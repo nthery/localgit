@@ -47,7 +47,7 @@ end_test()
 assert()
 {
     local -r cmd="$1"
-    eval "$cmd" || error "FAILURE: $test_name: command [$cmd] returned $?"
+    eval "$cmd" || error "FAILURE: $test_name: command { $cmd } returned $?"
 }
 
 # Execute test functions matching specified regex.
