@@ -19,10 +19,55 @@ lg()
     "$lg_bin" "$@"
 }
 
+test_create_git_dir_prefix()
+{
+    mkdir ../backup
+}
+
+test_lg_init_creates_local_git_dir_with_bigbang_commit()
+{
+    lg init
+    assert "[[ -d .git ]]"
+    assert "git log --oneline | grep 'lg: big bang'"
+}
+
+test_lg_init_switches_to_default_topic_branch()
+{
+    lg init
+    # TODO: for some reason grep does not match when replacing '.' with '_' in the following regex.
+    assert "git branch | grep '\* test_lg_init.switches_to_default_topic_branch'"
+}
+
+test_lg_init_opt_n_switches_to_specified_topic_branch()
+{
+    lg init -n mytopic
+    assert "git branch | grep '\* mytopic'"
+}
+
+test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_specified()
+{
+    export LG_GIT_DIR_PREFIX=../backup
+    lg init
+    assert "[[ -f .git ]]"
+    assert "[[ -d $LG_GIT_DIR_PREFIX/test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_specified.git ]]"
+    assert "git log --oneline | grep 'lg: big bang'"
+    unset LG_GIT_DIR_PREFIX
+}
+
+test_lg_init_opt_n_creates_named_remote_git_dir_when_prefix_env_var_specified()
+{
+    export LG_GIT_DIR_PREFIX=../backup
+    lg init -n mysb
+    assert "[[ -f .git ]]"
+    assert "[[ -d $LG_GIT_DIR_PREFIX/mysb.git ]]"
+    assert "git log --oneline | grep 'lg: big bang'"
+    unset LG_GIT_DIR_PREFIX
+}
+
 test_lg_import_creates_commit_in_master()
 {
     touch a
-    lg init -b topic
+    lg init
 
     lg import a
     assert "git diff master^..master | grep '^diff --git a/a'"
@@ -32,7 +77,7 @@ test_lg_import_creates_commit_in_master()
 test_lg_import_puts_files_in_log_if_small_enough()
 {
     touch a b c
-    lg init -b topic
+    lg init
 
     lg import a b c
     assert 'git log --oneline master^..master | grep -q "lg: import a b c$"'
@@ -41,7 +86,7 @@ test_lg_import_puts_files_in_log_if_small_enough()
 test_lg_import_truncates_file_in_log_if_too_long()
 {
     touch a_very_very_longish_file_name_that_is_way_too_big_to_fit_in_commit_log_subject
-    lg init -b topic
+    lg init
 
     lg import a_very_very_longish_file_name_that_is_way_too_big_to_fit_in_commit_log_subject
     assert 'git log --oneline master^..master | grep -q "lg: import a_very_very_longish.*\.\.\.$"'
@@ -53,7 +98,7 @@ test_lg_import_strips_dirnames_in_log_if_too_long()
     touch a/very/very/longish/file/path/that/is/way/too/big/to/fit/in/commit/log/subject/a
     touch b
 
-    lg init -b topic
+    lg init
 
     lg import a/very/very/longish/file/path/that/is/way/too/big/to/fit/in/commit/log/subject/a b
     assert 'git log --oneline master^..master | grep -q "lg: import a b$"'
@@ -62,7 +107,7 @@ test_lg_import_strips_dirnames_in_log_if_too_long()
 test_lg_files_prints_added_edited_removed_files()
 {
     touch a b
-    lg init -b topic
+    lg init
 
     lg import a
     echo AAA > a

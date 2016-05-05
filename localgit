@@ -90,25 +90,26 @@ all_files()
 
 start_non_local_git_root_creation()
 {
-    local -r gitroot="$1"
+    local -r name="$1"
 
-    if [[ -n "$gitroot" ]]; then
-        local -r parent="$(dirname "$gitroot")"
-        [[ -d "$parent" ]] || error "directory not found: $parent"
-        [[ ! -d "$gitroot" ]] || error "directory already exists: $gitroot"
-        pushd "$parent"
+    if [[ -n "$LG_GIT_DIR_PREFIX" ]]; then
+        [[ -d "$LG_GIT_DIR_PREFIX" ]] || error "directory not found: $LG_GIT_DIR_PREFIX"
+        local -r git_dir="$LG_GIT_DIR_PREFIX/${name}.git"
+        [[ ! -d "$git_dir" ]] || error "directory already exists: $git_dir"
+        pushd "$LG_GIT_DIR_PREFIX"
     fi
 }
 
 complete_non_local_git_root_creation()
 {
-    local -r gitroot="$1"
+    local -r name="$1"
 
-    if [[ -n "$gitroot" ]]; then
-        mv .git "$(basename "$gitroot")"
+    if [[ -n "$LG_GIT_DIR_PREFIX" ]]; then
+        mv .git "${name}.git"
         popd
-        git --git-dir "$gitroot" config core.worktree "$(pwd)"
-        echo "gitdir: $(realpath "$gitroot")" > .git
+        local -r git_dir="$LG_GIT_DIR_PREFIX/${name}.git"
+        git --git-dir "$git_dir" config core.worktree "$(pwd)"
+        echo "gitdir: $(realpath "$git_dir")" > .git
     fi
 }
 
@@ -121,22 +122,24 @@ commands="${commands}init - create local git\n"
 lg_init()
 {
     local opt
-    local gitroot
-    local topic_branch
-    while getopts ":r:b:" opt; do
+    local name
+    while getopts ":r:n:" opt; do
         case $opt in
-            r) gitroot="$OPTARG" ;;
-            b) topic_branch="$OPTARG" ;;
+            n) name="$OPTARG" ;;
             :) error "option $OPTARG: missing argument" ;;
             *) error "bad option: $OPTARG" ;;
         esac
     done
 
+    if [[ -z "$name" ]]; then
+        name="$(basename "$(pwd)")"
+    fi
+
     shift $(( OPTIND - 1 ))
 
-    [[ ! -d .git ]] || error "directory already exists: .git"
+    [[ ! -r .git ]] || error ".git already exists"
 
-    start_non_local_git_root_creation "$gitroot"
+    start_non_local_git_root_creation "$name"
 
     tron
 
@@ -146,11 +149,10 @@ lg_init()
     # Failing this initial lg-import from orphan topic branch fails.
     git commit --allow-empty -m 'lg: big bang'
 
-    complete_non_local_git_root_creation "$gitroot"
+    complete_non_local_git_root_creation "$name"
 
-    if [[ -n "$topic_branch" ]]; then
-        git checkout -b "$topic_branch"
-    fi
+    # Switch to topic branch.
+    git checkout -b "$name"
 }
 
 ##############################################################################
