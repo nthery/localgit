@@ -223,6 +223,7 @@ do_sync()
 
     tron
 
+    # shellcheck disable=SC2046
     git add $(all_files)
 
     git commit -m "$msg"
