@@ -113,6 +113,11 @@ complete_non_local_git_root_creation()
     fi
 }
 
+parent_dir()
+{
+    basename "$(pwd)"
+}
+
 ##############################################################################
 # init command
 ##############################################################################
@@ -123,6 +128,7 @@ lg_init()
 {
     local opt
     local name
+    name="$(parent_dir)"
     while getopts ":r:n:" opt; do
         case $opt in
             n) name="$OPTARG" ;;
@@ -130,10 +136,6 @@ lg_init()
             *) error "bad option: $OPTARG" ;;
         esac
     done
-
-    if [[ -z "$name" ]]; then
-        name="$(basename "$(pwd)")"
-    fi
 
     shift $(( OPTIND - 1 ))
 
@@ -283,13 +285,28 @@ lg_files()
 
 commands="${commands}clone - clone local git repo into another existing source tree\n"
 
+# Validate user-provided source git directory and follow link if .git file provided.
+src_git_dir()
+{
+    local src="$1"
+    [[ -n "$src" ]] || error "missing source repo"
+    if [[ -f "$src" ]]; then
+        local -r remote_dir="$(awk '/^gitdir:/ { print $2 }' "$src")"
+        [[ -n "$remote_dir" ]] || error "no gitdir in $src file"
+        src="$remote_dir"
+    fi
+    [[ -d "$src" ]] || error "source git repo does not exist: $src"
+    echo "$src"
+}
+
 lg_clone()
 {
     local opt
-    local dst
-    while getopts ":r:" opt; do
+    local name
+    name="$(parent_dir)"
+    while getopts ":n:" opt; do
         case $opt in
-            r) dst="$OPTARG" ;;
+            n) name="$OPTARG" ;;
             :) error "option $OPTARG: missing argument" ;;
             *) error "bad option: $OPTARG" ;;
         esac
@@ -297,17 +314,15 @@ lg_clone()
 
     shift $(( OPTIND - 1 ))
 
-    local src="$1"
-    [[ -n "$src" ]] || error "missing source repo"
-    [[ -d "$src" ]] || error "source git repo does not exist: $src"
+    local -r src="$(src_git_dir "$1")"
 
-    start_non_local_git_root_creation "$dst"
+    start_non_local_git_root_creation "$name"
 
     tron
 
     git init
 
-    complete_non_local_git_root_creation "$dst"
+    complete_non_local_git_root_creation "$name"
 
     git remote add origin "$src"
     git fetch

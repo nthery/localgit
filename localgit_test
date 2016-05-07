@@ -44,17 +44,17 @@ test_lg_init_opt_n_switches_to_specified_topic_branch()
     assert "git branch | grep '\* mytopic'"
 }
 
-test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_specified()
+test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_set()
 {
     export LG_GIT_DIR_PREFIX=../backup
     lg init
     assert "[[ -f .git ]]"
-    assert "[[ -d $LG_GIT_DIR_PREFIX/test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_specified.git ]]"
+    assert "[[ -d $LG_GIT_DIR_PREFIX/test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_set.git ]]"
     assert "git log --oneline | grep 'lg: big bang'"
     unset LG_GIT_DIR_PREFIX
 }
 
-test_lg_init_opt_n_creates_named_remote_git_dir_when_prefix_env_var_specified()
+test_lg_init_opt_n_creates_named_remote_git_dir_when_prefix_env_var_set()
 {
     export LG_GIT_DIR_PREFIX=../backup
     lg init -n mysb
@@ -62,6 +62,69 @@ test_lg_init_opt_n_creates_named_remote_git_dir_when_prefix_env_var_specified()
     assert "[[ -d $LG_GIT_DIR_PREFIX/mysb.git ]]"
     assert "git log --oneline | grep 'lg: big bang'"
     unset LG_GIT_DIR_PREFIX
+}
+
+test_create_original_clones()
+{
+    mkdir ../original_clone_with_local_git_dir
+    pushd ../original_clone_with_local_git_dir
+    lg init
+    touch a
+    lg import a
+    popd
+
+    mkdir ../original_clone_with_remote_git_dir
+    pushd ../original_clone_with_remote_git_dir
+    export LG_GIT_DIR_PREFIX=../backup
+    lg init
+    unset LG_GIT_DIR_PREFIX
+    touch a
+    lg import a
+    popd
+}
+
+test_lg_clone_clones_from_given_git_dir_into_local_dir()
+{
+    lg clone ../original_clone_with_local_git_dir/.git
+
+    assert "git diff master^..master | grep '^diff --git a/a'"
+}
+
+test_lg_clone_clones_from_given_git_file()
+{
+    lg clone ../original_clone_with_remote_git_dir/.git
+
+    assert "git diff master^..master | grep '^diff --git a/a'"
+}
+
+test_lg_clone_clones_into_default_remote_dir_when_prefix_env_var_set()
+{
+    export LG_GIT_DIR_PREFIX=../backup
+    lg clone ../original_clone_with_local_git_dir/.git
+    unset LG_GIT_DIR_PREFIX
+
+    assert "[[ -f .git ]]"
+    assert "[[ -d ../backup/test_lg_clone_clones_into_default_remote_dir_when_prefix_env_var_set.git ]]"
+    assert "git diff master^..master | grep '^diff --git a/a'"
+}
+
+test_lg_clone_opt_n_clones_into_named_remote_dir_when_prefix_env_var_set()
+{
+    export LG_GIT_DIR_PREFIX=../backup
+    lg clone -n lg_clone_opt_n ../original_clone_with_local_git_dir/.git
+    unset LG_GIT_DIR_PREFIX
+
+    assert "[[ -f .git ]]"
+    assert "[[ -d ../backup/lg_clone_opt_n.git ]]"
+    assert "git diff master^..master | grep '^diff --git a/a'"
+}
+
+test_lg_clone_ignores_opt_n_when_prefix_env_var_unset()
+{
+    lg clone -n ignored ../original_clone_with_local_git_dir/.git
+
+    assert "[[ -d .git ]]"
+    assert "git diff master^..master | grep '^diff --git a/a'"
 }
 
 test_lg_import_creates_commit_in_master()
