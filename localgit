@@ -118,7 +118,7 @@ complete_non_local_git_root_creation()
 
 commands="${commands}init - create local git\n"
 
-do_init()
+lg_init()
 {
     local opt
     local gitroot
@@ -159,7 +159,7 @@ do_init()
 
 commands="${commands}import - add file to local git\n"
 
-do_import()
+lg_import()
 {
     # Error out if some files do not exist or are already baselined.
     local f
@@ -212,7 +212,7 @@ do_import()
 
 commands="${commands}sync - rebase local master branch after sync'ing from remote SCM\n"
 
-do_sync()
+lg_sync()
 {
     expect_master
 
@@ -235,7 +235,7 @@ do_sync()
 
 commands="${commands}status - print status of files in local branches\n"
 
-do_status()
+lg_status()
 {
     git status -uno
 }
@@ -246,7 +246,7 @@ do_status()
 
 commands="${commands}log - run git log on local topic branch excluding local master\n"
 
-do_log()
+lg_log()
 {
     expect_topic
     git log master.. "$@"
@@ -258,7 +258,7 @@ do_log()
 
 commands="${commands}files - print files in local topic branch\n"
 
-do_files()
+lg_files()
 {
     expect_topic
     local rev="$*"
@@ -281,7 +281,7 @@ do_files()
 
 commands="${commands}clone - clone local git repo into another existing source tree\n"
 
-do_clone()
+lg_clone()
 {
     local opt
     local dst
@@ -324,13 +324,13 @@ cmd=$1
 shift
 
 case "$cmd" in
-    init)       do_init "$@" ;;
-    i|import)   do_import "$@" ;;
-    sync)       do_sync "$@" ;;
-    s|status)   do_status "$@" ;;
-    f|files)    do_files "$@" ;;
-    log)        do_log "$@" ;;
-    clone)      do_clone "$@" ;;
+    init)       lg_init "$@" ;;
+    i|import)   lg_import "$@" ;;
+    sync)       lg_sync "$@" ;;
+    s|status)   lg_status "$@" ;;
+    f|files)    lg_files "$@" ;;
+    log)        lg_log "$@" ;;
+    clone)      lg_clone "$@" ;;
     help)       usage ;;
     *)          usage "unknown command: $cmd" ;;
 esac
