@@ -27,8 +27,7 @@ does not contain any file initially.
     f1 f2 f3
 
 The master branch is used internally by `localgit` and should never be used by
-end-users so lg init creates a topic branch named after the current directory:
-you want and switch between them.
+end-users so `lg init` creates a topic branch named after the current directory:
 
     $ git branch
       master
