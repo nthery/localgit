@@ -154,7 +154,7 @@ lg_init()
     complete_non_local_git_root_creation "$name"
 
     # Switch to topic branch.
-    git checkout -b "$name"
+    git checkout -b dev
 }
 
 ##############################################################################

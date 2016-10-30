@@ -35,13 +35,7 @@ test_lg_init_switches_to_default_topic_branch()
 {
     lg init
     # TODO: for some reason grep does not match when replacing '.' with '_' in the following regex.
-    assert "git branch | grep '\* test_lg_init.switches_to_default_topic_branch'"
-}
-
-test_lg_init_opt_n_switches_to_specified_topic_branch()
-{
-    lg init -n mytopic
-    assert "git branch | grep '\* mytopic'"
+    assert "git branch | grep '\* dev'"
 }
 
 test_lg_init_creates_default_remote_git_dir_when_prefix_env_var_set()
