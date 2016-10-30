@@ -170,7 +170,7 @@ lg_import()
     for f in "$@"; do
         [[ -f "$f" ]] || error "missing file: $f"
         if all_files | grep -q -w "$f"; then
-            error>&2 "file already baselined: $f"
+            error "file already baselined: $f"
         fi
     done
 
