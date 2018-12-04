@@ -230,7 +230,7 @@ lg_import()
 
     git checkout master
 
-    git add "$@"
+    git add -f "$@"
 
     # Sometimes the detection of files already baselined fails for some
     # mysterious reason and the commit fails because there is nothing to add.
