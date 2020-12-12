@@ -234,7 +234,7 @@ lg_import()
 
     # TODO: Sometimes the detection of files already baselined fails because
     # it is flawed: it greps a sequence of repo-relative paths against an
-    @ arbitrary path that may for example contain '..'.
+    # arbitrary path that may for example contain '..'.
     # Work around this for the time being by absorbing the "nothing to commit"
     # error to avoid bailing out while in master.
     git commit -m "$log" || true
