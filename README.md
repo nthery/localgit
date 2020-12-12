@@ -27,11 +27,11 @@ does not contain any file initially.
     f1 f2 f3
 
 The master branch is used internally by `localgit` and should never be used by
-end-users so `lg init` creates a topic branch named after the current directory:
+end-users so `lg init` creates a topic branch named `dev`:
 
     $ git branch
       master
-    * scm
+    * dev
 
 Before modifying a file, import it in `localgit`.
 
@@ -55,7 +55,7 @@ After pulling from other SCM, report pulled changes into the master branch
 
 Then rebase your topic branches:
 
-    $ git checkout mytopic
+    $ git checkout dev
     $ git rebase master
 
 Listing all files in topic branch may be useful for example for preparing a
