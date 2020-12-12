@@ -174,7 +174,7 @@ test_lg_files_prints_added_edited_removed_files()
     git rm b
     git commit -am 'rm b'
 
-    touch c
+    echo CCC > c
     git add c
     git commit -am 'add c'
 
