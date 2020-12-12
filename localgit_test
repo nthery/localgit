@@ -131,6 +131,20 @@ test_lg_import_creates_commit_in_master()
     assert "git diff master^..master | grep '^new file'"
 }
 
+test_lg_import_detects_files_already_baselined()
+{
+    touch a
+    lg init
+    lg import a
+
+    set +e
+    lg import a > lg_import.out 2>&1 
+    local -r rc=$?
+    set -e
+    assert '(( $rc != 0 ))'
+    assert 'grep "file already baselined: a" lg_import.out'
+}
+
 test_lg_import_puts_files_in_log_if_small_enough()
 {
     touch a b c
