@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
-# Copyright (c) 2016, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2020, Nicolas Thery (nthery@gmail.com)
 #
 # Maintain local git branches over sources managed with another SCM.
 # See https://github.com/nthery/localgit for details.
@@ -100,6 +100,37 @@ start_non_local_git_root_creation()
     fi
 }
 
+# macOS does not have realpath(1) so emulate it.
+# Pinched from https://stackoverflow.com/questions/3572030/bash-script-absolute-path-with-os-x
+portable_realpath()
+{
+    local -r path="$1"
+
+    local -r saved_cwd="$(pwd)"
+
+    cd "$(dirname "$path")"
+    local link
+    link=$(readlink "$(basename "$path")")
+    while [[ -n "$link" ]]; do
+        cd "$(dirname "$link")"
+        link=$(readlink "$(basename "$path")")
+    done
+    local -r real="$(pwd)/$(basename "$path")"
+    cd "$saved_cwd"
+    echo "$real"
+}
+
+xrealpath()
+{
+    local -r path="$1"
+
+    if which realpath; then
+        realpath "$path"
+    else
+        portable_realpath "$path"
+    fi
+}
+
 complete_non_local_git_root_creation()
 {
     local -r name="$1"
@@ -109,7 +140,7 @@ complete_non_local_git_root_creation()
         popd
         local -r git_dir="$LG_GIT_DIR_PREFIX/${name}.git"
         git --git-dir "$git_dir" config core.worktree "$(pwd)"
-        echo "gitdir: $(realpath "$git_dir")" > .git
+        echo "gitdir: $(xrealpath "$git_dir")" > .git
     fi
 }
 
