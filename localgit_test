@@ -199,4 +199,5 @@ test_lg_files_prints_added_edited_removed_files()
     assert "grep '^add c$' lg_files.out"
 }
 
+unset LG_GIT_DIR_PREFIX
 run_tests "$@"
