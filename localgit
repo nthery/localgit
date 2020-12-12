@@ -232,7 +232,10 @@ lg_import()
 
     git add "$@"
 
-    git commit -m "$log"
+    # Sometimes the detection of files already baselined fails for some
+    # mysterious reason and the commit fails because there is nothing to add.
+    # Absorb error when this happens to avoid bailing out while in master.
+    git commit -m "$log" || true
 
     git checkout "$topic"
 
