@@ -124,7 +124,7 @@ xrealpath()
 {
     local -r path="$1"
 
-    if which realpath; then
+    if type realpath >/dev/null 2>&1; then
         realpath "$path"
     else
         portable_realpath "$path"
