@@ -368,6 +368,45 @@ lg_clone()
 }
 
 ##############################################################################
+# p4 command and subcommands
+##############################################################################
+
+commands="${commands}p4 export - reflect all changes in topic branch into default changelist\n"
+
+p4_root()
+{
+    type p4 >/dev/null 2>&1 || error "cannot find p4 executable in path"
+
+    local root
+    root="$(p4 info | sed -n 's/^Client root: //p')"
+    [[ -n "$root" ]] || error "cannot find p4 client root"
+
+    echo "$root"
+}
+
+lg_p4_export()
+{
+    pushd "$(p4_root)"
+    lg_files | while read f
+    do
+        p4 $f
+    done
+    popd
+}
+
+lg_p4()
+{
+    local -r subcmd="$1"
+    case "$subcmd" in
+        export)
+            shift 1
+            lg_p4_export "$@" ;;
+        *)
+            error "unknown or missing subcommand" ;;
+    esac
+}
+
+##############################################################################
 # MAIN PROGRAM
 ##############################################################################
 
@@ -384,6 +423,7 @@ case "$cmd" in
     f|files)    lg_files "$@" ;;
     log)        lg_log "$@" ;;
     clone)      lg_clone "$@" ;;
+    p4)         lg_p4 "$@" ;;
     help)       usage ;;
     *)          usage "unknown command: $cmd" ;;
 esac
