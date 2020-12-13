@@ -387,7 +387,7 @@ p4_root()
 lg_p4_export()
 {
     pushd "$(p4_root)"
-    lg_files | while read f
+    lg_files | while read -r f
     do
         p4 $f
     done
