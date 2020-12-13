@@ -5,9 +5,6 @@ another source control system.
 
 ## Disclaimer
 
-- This script has not been thoroughly tested so use at your own risk and be
-  ready to debug it and manually repair the local git tree.
-
 - There are undocumented options.  Use the source Luke!
 
 ## Installation
