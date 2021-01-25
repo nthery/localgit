@@ -310,7 +310,7 @@ lg_files()
         function flush(action) { if (file != "") { print action, file; file = "" } }
         /^diff/ { flush("edit"); file = substr($3, 3) }
         /^new file/ { flush("add") }
-        /^deleted file/ { flush("rm") }
+        /^deleted file/ { flush("delete") }
         END { flush("edit") }
         '
 }
