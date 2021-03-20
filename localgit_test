@@ -195,7 +195,7 @@ test_lg_files_prints_added_edited_removed_files()
     lg files > lg_files.out
     assert "(( $(wc -l <lg_files.out) == 3 ))"
     assert "grep '^edit a$' lg_files.out"
-    assert "grep '^rm b$' lg_files.out"
+    assert "grep '^delete b$' lg_files.out"
     assert "grep '^add c$' lg_files.out"
 }
 
