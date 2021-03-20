@@ -199,5 +199,25 @@ test_lg_files_prints_added_edited_removed_files()
     assert "grep '^add c$' lg_files.out"
 }
 
+test_lg_sync()
+{
+    touch a_file another_file
+    lg init
+    lg import a_file another_file
+
+    # Simulate foreign update.
+    git checkout master
+    echo AAA > a_file
+
+    # Check sync works when not in root.
+    mkdir c
+    cd c
+
+    lg sync blabla
+    assert "git show | grep 'lg: sync: blabla'"
+    assert "(( $(git show --stat | grep -c 'a_file') == 1 ))"
+    assert "(( $(git show --stat | grep -c 'another_file') == 0 ))"
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"

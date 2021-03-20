@@ -88,6 +88,11 @@ all_files()
     git ls-tree --full-tree -r master | awk '{print $4}' | grep -vw .lg
 }
 
+# Print root of git repo.
+git_root() {
+    git rev-parse --show-toplevel
+}
+
 start_non_local_git_root_creation()
 {
     local -r name="$1"
@@ -263,8 +268,10 @@ lg_sync()
 
     tron
 
+    pushd "$(git_root)"
     # shellcheck disable=SC2046
     git add $(all_files)
+    popd
 
     git commit -m "$msg"
 }
@@ -389,6 +396,7 @@ lg_p4_export()
     pushd "$(p4_root)"
     lg_files | while read -r f
     do
+        # shellcheck disable=SC2086
         p4 $f
     done
     popd
