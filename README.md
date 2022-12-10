@@ -23,11 +23,11 @@ does not contain any file initially.
     $ ls
     f1 f2 f3
 
-The master branch is used internally by `localgit` and should never be used by
+The main branch is used internally by `localgit` and should never be used by
 end-users so `lg init` creates a topic branch named `dev`:
 
     $ git branch
-      master
+      main
     * dev
 
 Before modifying a file, import it in `localgit`.
@@ -40,12 +40,12 @@ Import, hack, rince and repeat.  You can use all git commands in your topic
 branches (`git rebase -i`, `git diff`...).
 
 Before pulling new changes from the other SCM into your working copy, you must
-switch back the the master branch first.
+switch back the the main branch first.
 
-    $ git checkout master
+    $ git checkout main
     $ ... pull update from other SCM ...
 
-After pulling from other SCM, report pulled changes into the master branch
+After pulling from other SCM, report pulled changes into the main branch
 (ignoring files absent from local git):
 
     $ lg sync
@@ -53,7 +53,7 @@ After pulling from other SCM, report pulled changes into the master branch
 Then rebase your topic branches:
 
     $ git checkout dev
-    $ git rebase master
+    $ git rebase main
 
 Listing all files in topic branch may be useful for example for preparing a
 commit in the other SCM.
@@ -75,8 +75,8 @@ existing local git repo in this new workspace.
 
 ## Under the hood
 
-`lg import` first creates a commit in the master branch that adds the specified
+`lg import` first creates a commit in the main branch that adds the specified
 file, then rebase the current topic branch.
 
-`lg sync` creates a commit in the master branch that updates all files in local
+`lg sync` creates a commit in the main branch that updates all files in local
 git that have been changed by other SCM.

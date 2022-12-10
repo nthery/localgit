@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2016-2020, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2022, Nicolas Thery (nthery@gmail.com)
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
 #
@@ -81,14 +81,14 @@ test_lg_clone_clones_from_given_git_dir_into_local_dir()
 {
     lg clone ../original_clone_with_local_git_dir/.git
 
-    assert "git diff master^..master | grep '^diff --git a/a'"
+    assert "git diff main^..main | grep '^diff --git a/a'"
 }
 
 test_lg_clone_clones_from_given_git_file()
 {
     lg clone ../original_clone_with_remote_git_dir/.git
 
-    assert "git diff master^..master | grep '^diff --git a/a'"
+    assert "git diff main^..main | grep '^diff --git a/a'"
 }
 
 test_lg_clone_clones_into_default_remote_dir_when_prefix_env_var_set()
@@ -99,7 +99,7 @@ test_lg_clone_clones_into_default_remote_dir_when_prefix_env_var_set()
 
     assert "[[ -f .git ]]"
     assert "[[ -d ../backup/test_lg_clone_clones_into_default_remote_dir_when_prefix_env_var_set.git ]]"
-    assert "git diff master^..master | grep '^diff --git a/a'"
+    assert "git diff main^..main | grep '^diff --git a/a'"
 }
 
 test_lg_clone_opt_n_clones_into_named_remote_dir_when_prefix_env_var_set()
@@ -110,7 +110,7 @@ test_lg_clone_opt_n_clones_into_named_remote_dir_when_prefix_env_var_set()
 
     assert "[[ -f .git ]]"
     assert "[[ -d ../backup/lg_clone_opt_n.git ]]"
-    assert "git diff master^..master | grep '^diff --git a/a'"
+    assert "git diff main^..main | grep '^diff --git a/a'"
 }
 
 test_lg_clone_ignores_opt_n_when_prefix_env_var_unset()
@@ -118,17 +118,17 @@ test_lg_clone_ignores_opt_n_when_prefix_env_var_unset()
     lg clone -n ignored ../original_clone_with_local_git_dir/.git
 
     assert "[[ -d .git ]]"
-    assert "git diff master^..master | grep '^diff --git a/a'"
+    assert "git diff main^..main | grep '^diff --git a/a'"
 }
 
-test_lg_import_creates_commit_in_master()
+test_lg_import_creates_commit_in_main()
 {
     touch a
     lg init
 
     lg import a
-    assert "git diff master^..master | grep '^diff --git a/a'"
-    assert "git diff master^..master | grep '^new file'"
+    assert "git diff main^..main | grep '^diff --git a/a'"
+    assert "git diff main^..main | grep '^new file'"
 }
 
 test_lg_import_detects_files_already_baselined()
@@ -151,7 +151,7 @@ test_lg_import_puts_files_in_log_if_small_enough()
     lg init
 
     lg import a b c
-    assert 'git log --oneline master^..master | grep -q "lg: import a b c$"'
+    assert 'git log --oneline main^..main | grep -q "lg: import a b c$"'
 }
 
 test_lg_import_truncates_file_in_log_if_too_long()
@@ -160,7 +160,7 @@ test_lg_import_truncates_file_in_log_if_too_long()
     lg init
 
     lg import a_very_very_longish_file_name_that_is_way_too_big_to_fit_in_commit_log_subject
-    assert 'git log --oneline master^..master | grep -q "lg: import a_very_very_longish.*\.\.\.$"'
+    assert 'git log --oneline main^..main | grep -q "lg: import a_very_very_longish.*\.\.\.$"'
 }
 
 test_lg_import_strips_dirnames_in_log_if_too_long()
@@ -172,7 +172,7 @@ test_lg_import_strips_dirnames_in_log_if_too_long()
     lg init
 
     lg import a/very/very/longish/file/path/that/is/way/too/big/to/fit/in/commit/log/subject/a b
-    assert 'git log --oneline master^..master | grep -q "lg: import a b$"'
+    assert 'git log --oneline main^..main | grep -q "lg: import a b$"'
 }
 
 test_lg_files_prints_added_edited_removed_files()
@@ -206,7 +206,7 @@ test_lg_sync()
     lg import a_file another_file
 
     # Simulate foreign update.
-    git checkout master
+    git checkout main
     echo AAA > a_file
 
     # Check sync works when not in root.

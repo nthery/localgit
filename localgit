@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
-# Copyright (c) 2016-2020, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2022, Nicolas Thery (nthery@gmail.com)
 #
 # Maintain local git branches over sources managed with another SCM.
 # See https://github.com/nthery/localgit for details.
@@ -65,15 +65,15 @@ usage()
 
 expect_topic()
 {
-    if [[ "$(current_branch)" == "master" ]]; then
-        error "should be in topic branch but in master"
+    if [[ "$(current_branch)" == "main" ]]; then
+        error "should be in topic branch but in main"
     fi
 }
 
-expect_master()
+expect_main()
 {
-    if [[ "$(current_branch)" != "master" ]]; then
-        error "should be in master branch but in $(current_branch)"
+    if [[ "$(current_branch)" != "main" ]]; then
+        error "should be in main branch but in $(current_branch)"
     fi
 }
 
@@ -85,7 +85,7 @@ current_branch()
 # Print all files in repo.
 all_files()
 {
-    git ls-tree --full-tree -r master | awk '{print $4}' | grep -vw .lg
+    git ls-tree --full-tree -r main | awk '{print $4}' | grep -vw .lg
 }
 
 # Print root of git repo.
@@ -181,7 +181,7 @@ lg_init()
 
     tron
 
-    git init
+    git init --initial-branch=main
 
     # Create dummy initial commit.
     # Failing this initial lg-import from orphan topic branch fails.
@@ -233,7 +233,7 @@ lg_import()
 
     git stash save lg-import: "$*"
 
-    git checkout master
+    git checkout main
 
     git add -f "$@"
 
@@ -241,12 +241,12 @@ lg_import()
     # it is flawed: it greps a sequence of repo-relative paths against an
     # arbitrary path that may for example contain '..'.
     # Work around this for the time being by absorbing the "nothing to commit"
-    # error to avoid bailing out while in master.
+    # error to avoid bailing out while in main.
     git commit -m "$log" || true
 
     git checkout "$topic"
 
-    git rebase master
+    git rebase main
 
     git stash pop || true
 }
@@ -255,11 +255,11 @@ lg_import()
 # sync command
 ##############################################################################
 
-commands="${commands}sync - rebase local master branch after sync'ing from remote SCM\n"
+commands="${commands}sync - rebase local main branch after sync'ing from remote SCM\n"
 
 lg_sync()
 {
-    expect_master
+    expect_main
 
     local msg="lg: sync"
     if [[ -n "$*" ]]; then
@@ -291,12 +291,12 @@ lg_status()
 # log command
 ##############################################################################
 
-commands="${commands}log - run git log on local topic branch excluding local master\n"
+commands="${commands}log - run git log on local topic branch excluding local main\n"
 
 lg_log()
 {
     expect_topic
-    git log master.. "$@"
+    git log main.. "$@"
 }
 
 ##############################################################################
@@ -310,7 +310,7 @@ lg_files()
     expect_topic
     local rev="$*"
     if [[ -z "$rev" ]]; then
-        rev="master...HEAD"
+        rev="main...HEAD"
     fi
 
     git diff "$rev" | awk '
@@ -363,15 +363,15 @@ lg_clone()
 
     tron
 
-    git init
+    git init --initial-branch=main
 
     complete_non_local_git_root_creation "$name"
 
     git remote add origin "$src"
     git fetch
 
-    # Sync local master branch with remote one leaving local changes unmodified.
-    git reset origin/master
+    # Sync local main branch with remote one leaving local changes unmodified.
+    git reset origin/main
 }
 
 ##############################################################################
