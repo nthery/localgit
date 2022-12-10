@@ -253,7 +253,7 @@ lg_import()
 
     tron
 
-    git stash save lg-import: "$*"
+    git stash push -m "lg-import: $*"
 
     git checkout "$main_branch"
 
