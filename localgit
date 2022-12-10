@@ -210,6 +210,16 @@ lg_import()
         fi
     done
 
+    # Error out if some files are not descendants of the repo root.
+    local -r root_pattern="$(git_root)/*"
+    for f in "$@"; do
+        # Intentionally not quoting variables on next line to trigger pattern matching.
+        # shellcheck disable=SC2053
+        if [[ $(xrealpath "$f") != $root_pattern ]]; then
+            error "file not under repo root: $f"
+        fi
+    done
+
     expect_topic
 
     local -r topic=$(current_branch)

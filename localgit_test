@@ -145,6 +145,22 @@ test_lg_import_detects_files_already_baselined()
     assert 'grep "file already baselined: a" lg_import.out'
 }
 
+test_lg_import_detects_files_outside_of_repo_and_switches_back_to_default_topic_branch()
+{
+    touch a
+    mkdir repo
+    pushd repo
+    lg init
+    set +e
+    lg import ../a > lg_import.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( $rc != 0 ))'
+    assert "git branch | grep '\* dev'"
+    assert 'grep "file not under repo root: ../a" lg_import.out'
+    popd
+}
+
 test_lg_import_puts_files_in_log_if_small_enough()
 {
     touch a b c
