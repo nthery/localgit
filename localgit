@@ -388,8 +388,6 @@ lg_clone()
 # p4 command and subcommands
 ##############################################################################
 
-commands="${commands}p4 export - reflect all changes in topic branch into default changelist\n"
-
 p4_root()
 {
     type p4 >/dev/null 2>&1 || error "cannot find p4 executable in path"
@@ -401,21 +399,55 @@ p4_root()
     echo "$root"
 }
 
+emit_p4_export_commands()
+{
+    expect_topic
+
+    git diff "main..HEAD" | awk '
+        function flush() { if (from != "") { print "edit", from; from = to = "" } }
+        /^diff/ { flush(); from = substr($3, 3); to = substr($4, 3) }
+        /^new file/ { print("add", from); from = to = "" }
+        /^deleted file/ { print("delete", from); from = to = "" }
+        /^rename from/ { print("edit", from); print("move", from, to); from = to = "" }
+        END { flush() }
+        '
+}
+
+commands="${commands}p4 export - reflect all changes in topic branch into default changelist\n"
+
 lg_p4_export()
 {
     pushd "$(p4_root)"
-    lg_files | while read -r f
+
+    emit_p4_export_commands | while read -r cmd
     do
+        # Intentionally not quoting variable on next line to pass several arguments to p4.
         # shellcheck disable=SC2086
-        p4 $f
+        echo p4 $cmd
     done
+
     popd
+}
+
+commands="${commands}p4 dry-export - display p4 commands that would be executed by p4 export\n"
+
+lg_p4_dry_export()
+{
+    emit_p4_export_commands | while read -r cmd
+    do
+        # Intentionally not quoting variable on next line to pass several arguments to p4.
+        # shellcheck disable=SC2086
+        echo p4 $cmd
+    done
 }
 
 lg_p4()
 {
     local -r subcmd="$1"
     case "$subcmd" in
+        dry-export)
+            shift 1
+            lg_p4_dry_export "$@" ;;
         export)
             shift 1
             lg_p4_export "$@" ;;
