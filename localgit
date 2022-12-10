@@ -63,16 +63,28 @@ usage()
 # HELPERS
 ##############################################################################
 
+# Keep support for localgit repos created before renaming from master to main.
+detect_main_branch()
+{
+    if git branch | grep -qw "master"; then
+        echo "master"
+    elif git branch | grep -qw "main"; then
+        echo "main"
+    else
+        error "can not find main nor master branch"
+    fi
+}
+
 expect_topic()
 {
-    if [[ "$(current_branch)" == "main" ]]; then
+    if [[ "$(current_branch)" == "$main_branch" ]]; then
         error "should be in topic branch but in main"
     fi
 }
 
 expect_main()
 {
-    if [[ "$(current_branch)" != "main" ]]; then
+    if [[ "$(current_branch)" != "$main_branch" ]]; then
         error "should be in main branch but in $(current_branch)"
     fi
 }
@@ -85,7 +97,7 @@ current_branch()
 # Print all files in repo.
 all_files()
 {
-    git ls-tree --full-tree -r main | awk '{print $4}' | grep -vw .lg
+    git ls-tree --full-tree -r "$main_branch" | awk '{print $4}' | grep -vw .lg
 }
 
 # Print root of git repo.
@@ -243,7 +255,7 @@ lg_import()
 
     git stash save lg-import: "$*"
 
-    git checkout main
+    git checkout "$main_branch"
 
     git add -f "$@"
 
@@ -256,7 +268,7 @@ lg_import()
 
     git checkout "$topic"
 
-    git rebase main
+    git rebase "$main_branch"
 
     git stash pop || true
 }
@@ -306,7 +318,7 @@ commands="${commands}log - run git log on local topic branch excluding local mai
 lg_log()
 {
     expect_topic
-    git log main.. "$@"
+    git log "$main_branch..$@"
 }
 
 ##############################################################################
@@ -320,7 +332,7 @@ lg_files()
     expect_topic
     local rev="$*"
     if [[ -z "$rev" ]]; then
-        rev="main...HEAD"
+        rev="$main_branch...HEAD"
     fi
 
     git diff "$rev" | awk '
@@ -373,7 +385,7 @@ lg_clone()
 
     tron
 
-    git init --initial-branch=main
+    git init --initial-branch="main"
 
     complete_non_local_git_root_creation "$name"
 
@@ -381,7 +393,7 @@ lg_clone()
     git fetch
 
     # Sync local main branch with remote one leaving local changes unmodified.
-    git reset origin/main
+    git reset "origin/main"
 }
 
 ##############################################################################
@@ -403,7 +415,7 @@ emit_p4_export_commands()
 {
     expect_topic
 
-    git diff "main..HEAD" | awk '
+    git diff "$main_branch..HEAD" | awk '
         function flush() { if (from != "") { print "edit", from; from = to = "" } }
         /^diff/ { flush(); from = substr($3, 3); to = substr($4, 3) }
         /^new file/ { print("add", from); from = to = "" }
@@ -461,6 +473,8 @@ lg_p4()
 ##############################################################################
 
 (( $# > 0 )) || usage "missing command"
+
+main_branch=$(detect_main_branch)
 
 cmd=$1
 shift
