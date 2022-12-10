@@ -230,7 +230,7 @@ lg_import()
     if (( ${#log} > (80 - 3) )); then
         log="lg: import"
         for f in "$@"; do
-            log="$log $(basename $f)"
+            log="$log $(basename "$f")"
         done
     fi
 
