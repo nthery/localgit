@@ -24,47 +24,6 @@ test_create_git_dir_prefix()
     mkdir ../backup
 }
 
-test_lg_p4_dry_export()
-{
-    echo AAA > a
-    echo BBB > b
-    echo DDD > d
-    echo EEE > e
-    mkdir subdir
-
-    lg init
-
-    lg import a
-    echo AAA >> a
-    git commit -am 'edit a'
-
-    lg import b
-    git rm b
-    git commit -am 'rm b'
-
-    echo CCC > c
-    git add c
-    git commit -am 'add c'
-
-    lg import d
-    git mv d x
-    git commit -am 'd -> x'
-
-    lg import e
-    git mv e subdir/e
-    git commit -am 's -> subdir'
-
-    lg p4 dry-export > lg_p4_dry_export.out
-    assert "(( $(wc -l <lg_p4_dry_export.out) == 7 ))"
-    assert "grep '^p4 edit a$' lg_p4_dry_export.out"
-    assert "grep '^p4 delete b$' lg_p4_dry_export.out"
-    assert "grep '^p4 add c$' lg_p4_dry_export.out"
-    assert "grep '^p4 edit d$' lg_p4_dry_export.out"
-    assert "grep '^p4 move d x$' lg_p4_dry_export.out"
-    assert "grep '^p4 edit e$' lg_p4_dry_export.out"
-    assert "grep '^p4 move e subdir/e$' lg_p4_dry_export.out"
-}
-
 test_lg_init_creates_local_git_dir_with_bigbang_commit()
 {
     lg init
@@ -274,6 +233,47 @@ test_lg_sync()
     assert "git show | grep 'lg: sync: blabla'"
     assert "(( $(git show --stat | grep -c 'a_file') == 1 ))"
     assert "(( $(git show --stat | grep -c 'another_file') == 0 ))"
+}
+
+test_lg_p4_dry_export()
+{
+    echo AAA > a
+    echo BBB > b
+    echo DDD > d
+    echo EEE > e
+    mkdir subdir
+
+    lg init
+
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    lg import b
+    git rm b
+    git commit -am 'rm b'
+
+    echo CCC > c
+    git add c
+    git commit -am 'add c'
+
+    lg import d
+    git mv d x
+    git commit -am 'd -> x'
+
+    lg import e
+    git mv e subdir/e
+    git commit -am 's -> subdir'
+
+    lg p4 dry-export > lg_p4_dry_export.out
+    assert "(( $(wc -l <lg_p4_dry_export.out) == 7 ))"
+    assert "grep '^p4 edit a$' lg_p4_dry_export.out"
+    assert "grep '^p4 delete b$' lg_p4_dry_export.out"
+    assert "grep '^p4 add c$' lg_p4_dry_export.out"
+    assert "grep '^p4 edit d$' lg_p4_dry_export.out"
+    assert "grep '^p4 move d x$' lg_p4_dry_export.out"
+    assert "grep '^p4 edit e$' lg_p4_dry_export.out"
+    assert "grep '^p4 move e subdir/e$' lg_p4_dry_export.out"
 }
 
 unset LG_GIT_DIR_PREFIX
