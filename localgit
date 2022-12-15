@@ -474,10 +474,18 @@ lg_p4()
 
 (( $# > 0 )) || usage "missing command"
 
-main_branch=$(detect_main_branch)
-
 cmd=$1
 shift
+
+case "$cmd" in
+    init|help)
+        # For commands that do not assume an existing repo, force main branch
+        # name.
+        main_branch="main" ;;
+    *)
+        # For other commands use existing main branch name.
+        main_branch=$(detect_main_branch) ;;
+esac
 
 case "$cmd" in
     init)       lg_init "$@" ;;
