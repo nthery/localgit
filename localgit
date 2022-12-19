@@ -435,7 +435,7 @@ lg_p4_export()
     do
         # Intentionally not quoting variable on next line to pass several arguments to p4.
         # shellcheck disable=SC2086
-        echo p4 $cmd
+        p4 $cmd
     done
 
     popd
