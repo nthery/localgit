@@ -478,7 +478,7 @@ cmd=$1
 shift
 
 case "$cmd" in
-    init|help)
+    init|help|clone)
         # For commands that do not assume an existing repo, force main branch
         # name.
         main_branch="main" ;;
