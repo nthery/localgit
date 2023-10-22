@@ -17,7 +17,7 @@ commands=""
 # DEBUGGING
 ##############################################################################
 
-# TODO: Disable when thorougly tested.
+# TODO: Disable when thoroughly tested.
 debug=1
 
 # Enable shell tracing if debug mode set.
