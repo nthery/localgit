@@ -276,5 +276,45 @@ test_lg_p4_dry_export()
     assert "grep '^p4 move e subdir/e$' lg_p4_dry_export.out"
 }
 
+test_git_stash_lg_import_clean_working_tree()
+{
+    lg init
+
+    echo AAA > a
+    lg import a
+
+    # Make some change and stash it.
+    echo AAA >> a
+    git stash
+
+    # Import another file.
+    echo BBB > b
+    lg import b
+
+    # Is stashed change still stashed?
+    assert "(( $(git stash list | wc -l) == 1 ))"
+}
+
+test_git_stash_lg_import_dirty_working_tree()
+{
+    lg init
+
+    echo AAA > a
+    lg import a
+
+    # Make some change.
+    echo AAA >> a
+
+    # Import another file.
+    echo BBB > b
+    lg import b
+
+    # Nothing should be stashed.
+    assert "(( $(git stash list | wc -l) == 0 ))"
+
+    # The change is still there.
+    assert "git diff | grep '+AAA'"
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"

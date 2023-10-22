@@ -253,7 +253,12 @@ lg_import()
 
     tron
 
-    git stash push -m "lg-import: $*"
+    local must_unstash
+    must_unstash=0
+    if ! git diff --quiet; then
+        git stash push -m "lg-import: $*"
+        must_unstash=1
+    fi
 
     git checkout "$main_branch"
 
@@ -270,7 +275,9 @@ lg_import()
 
     git rebase "$main_branch"
 
-    git stash pop || true
+    if (( $must_unstash )); then
+        git stash pop
+    fi
 }
 
 ##############################################################################
