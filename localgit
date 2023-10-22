@@ -318,7 +318,7 @@ commands="${commands}log - run git log on local topic branch excluding local mai
 lg_log()
 {
     expect_topic
-    git log "$main_branch..$@"
+    git log "$main_branch..$*"
 }
 
 ##############################################################################
