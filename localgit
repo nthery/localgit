@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
-# Copyright (c) 2016-2022, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2023, Nicolas Thery (nthery@gmail.com)
 #
 # Maintain local git branches over sources managed with another SCM.
 # See https://github.com/nthery/localgit for details.
@@ -431,12 +431,33 @@ lg_p4_export()
 {
     pushd "$(p4_root)"
 
+    # Accumulate failed commands into temporary file.
+    local failed_commands
+    failed_commands="/tmp/lg_p4_export.failed_commands.$$"
+    # We want to expand now rather than at exit-time as exit could be called from caller.
+    # shellcheck disable=SC2064
+    trap "rm $failed_commands" EXIT
+    true > "$failed_commands"
+
     emit_p4_export_commands | while read -r cmd
     do
+        # Do not error out as some errors are harmless.
+        # When calling repeatedly this command and some files were moved, the corresponding
+        # p4 commands fail after the first time because the sources do not exist anymore.
+        set +e
         # Intentionally not quoting variable on next line to pass several arguments to p4.
         # shellcheck disable=SC2086
-        p4 $cmd
+        if ! p4 $cmd; then
+            echo "p4 $cmd" >> "$failed_commands"
+        fi
+        set -e
     done
+
+    if [[ -s "$failed_commands" ]]; then
+        echo 1>&2 "WARNING: some p4 commands failed:"
+        cat 1>&2 "$failed_commands"
+        exit 1
+    fi
 
     popd
 }
