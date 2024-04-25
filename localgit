@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
-# Copyright (c) 2016-2023, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2024, Nicolas Thery (nthery@gmail.com)
 #
 # Maintain local git branches over sources managed with another SCM.
 # See https://github.com/nthery/localgit for details.
@@ -432,6 +432,11 @@ emit_p4_export_commands()
         '
 }
 
+escape_p4_path()
+{
+    sed 's/@/%40/'
+}
+
 commands="${commands}p4 export - reflect all changes in topic branch into default changelist\n"
 
 lg_p4_export()
@@ -446,7 +451,7 @@ lg_p4_export()
     trap "rm $failed_commands" EXIT
     true > "$failed_commands"
 
-    emit_p4_export_commands | while read -r cmd
+    emit_p4_export_commands | escape_p4_path | while read -r cmd
     do
         # Do not error out as some errors are harmless.
         # When calling repeatedly this command and some files were moved, the corresponding
