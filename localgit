@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
-# Copyright (c) 2016-2024, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2025, Nicolas Thery (nthery@gmail.com)
 #
 # Maintain local git branches over sources managed with another SCM.
 # See https://github.com/nthery/localgit for details.
@@ -213,6 +213,18 @@ commands="${commands}import - add file to local git\n"
 
 lg_import()
 {
+    local rebase_all=0
+    local opt
+    while getopts ":ra" opt; do
+        case $opt in
+            a) rebase_all=1 ;;
+            :) error "option $OPTARG: missing argument" ;;
+            *) error "bad option: $OPTARG" ;;
+        esac
+    done
+    
+    shift $(( OPTIND - 1 ))
+    
     # Error out if some files do not exist or are already baselined.
     local f
     for f in "$@"; do
@@ -271,11 +283,23 @@ lg_import()
     # error to avoid bailing out while in main.
     git commit -m "$log" || true
 
-    git checkout "$topic"
+    if (( rebase_all )); then
+        local branches
+        branches=$(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v "^$main_branch$")
+        
+        for branch in $branches; do
+            echo "Rebasing branch: $branch"
+            git checkout "$branch"
+            git rebase "$main_branch"
+        done
+        
+        git checkout "$topic"
+    else
+        git checkout "$topic"
+        git rebase "$main_branch"
+    fi
 
-    git rebase "$main_branch"
-
-    if (( $must_unstash )); then
+    if (( must_unstash )); then
         git stash pop
     fi
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2016-2022, Nicolas Thery (nthery@gmail.com)
+# Copyright (c) 2016-2025, Nicolas Thery (nthery@gmail.com)
 # vim: ts=8 sts=4 sw=4 et ft=sh
 
 #
@@ -189,6 +189,91 @@ test_lg_import_strips_dirnames_in_log_if_too_long()
 
     lg import a/very/very/longish/file/path/that/is/way/too/big/to/fit/in/commit/log/subject/a b
     assert 'git log --oneline main^..main | grep -q "lg: import a b$"'
+}
+
+test_lg_import_rebases_all_branches()
+{
+    # Initialize repo
+    touch initial_file
+    lg init
+    lg import initial_file
+    
+    # Create first commit on dev branch (default branch after init)
+    echo "content1" > file1
+    git add file1
+    git commit -m "First commit on dev"
+    
+    # Create second commit on dev branch
+    echo "content2" > file2
+    git add file2
+    git commit -m "Second commit on dev"
+    
+    # Create dev_bis branch from dev
+    git checkout -b dev_bis
+    echo "content3" > file3
+    git add file3
+    git commit -m "First commit on dev_bis"
+    
+    # Create dev_ter branch from the first commit in dev
+    git checkout dev~1
+    git checkout -b dev_ter
+    echo "content4" > file4
+    git add file4
+    git commit -m "First commit on dev_ter"
+    
+    git checkout dev
+    
+    # Import a new file (this should rebase all branches)
+    echo "new_content" > new_file
+    lg import -a new_file
+    
+    # Verify new_file exists in main
+    git checkout main
+    assert '[[ -f new_file ]]'
+    assert 'grep -q 'new_content' new_file'
+    
+    # Verify new_file exists in dev and commits are preserved
+    git checkout dev
+    assert '[[ -f new_file ]]'
+    assert '[[ -f file1 ]]'
+    assert '[[ -f file2 ]]'
+    assert 'grep -q 'content1' file1'
+    assert 'grep -q 'content2' file2'
+    
+    # Verify new_file exists in dev_bis and commits are preserved
+    git checkout dev_bis
+    assert '[[ -f new_file ]]'
+    assert '[[ -f file1 ]]'
+    assert '[[ -f file2 ]]'
+    assert '[[ -f file3 ]]'
+    assert 'grep -q 'content3' file3'
+    
+    # Verify new_file exists in dev_ter and commits are preserved
+    git checkout dev_ter
+    assert '[[ -f new_file ]]'
+    assert '[[ -f file1 ]]'
+    assert '[[ -f file4 ]]'
+    assert 'grep -q 'content4' file4'
+    assert '! [[ -f file2 ]]'  # file2 should not exist in dev_ter
+    
+    # Verify branch structure is maintained
+
+    local -r main_sha1=$(git rev-parse main)
+    
+    git checkout dev
+    local -r dev_commits=$(git rev-list --count HEAD)
+    assert '(( $dev_commits == 5 ))'  #  bigbang + 2 imported files + 2 commits
+    assert 'git rev-list HEAD | grep -q $main_sha1'
+    
+    git checkout dev_bis
+    local -r dev_bis_commits=$(git rev-list --count HEAD)
+    assert '(( $dev_bis_commits == 6 ))'  #  bigbang + 2 imported files + 2 commits on dev + 1 commit
+    assert 'git rev-list HEAD | grep -q $main_sha1'
+
+    git checkout dev_ter
+    local -r dev_ter_commits=$(git rev-list --count HEAD)
+    assert '(( $dev_ter_commits == 5 ))'  #  bigbang + 2 imported files + 1 commits on dev + 1 commit   
+    assert 'git rev-list HEAD | grep -q $main_sha1'
 }
 
 test_lg_files_prints_added_edited_removed_files()
