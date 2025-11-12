@@ -467,6 +467,10 @@ lg_p4_export()
 {
     pushd "$(p4_root)"
 
+    # Reset perforce state but keep all files as-is on disk.  This way this command can
+    # be run several times without weird effects.
+    p4 revert -k ...
+
     # Accumulate failed commands into temporary file.
     local failed_commands
     failed_commands="/tmp/lg_p4_export.failed_commands.$$"
