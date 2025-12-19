@@ -467,9 +467,22 @@ lg_p4_export()
 {
     pushd "$(p4_root)"
 
-    # Reset perforce state but keep all files as-is on disk.  This way this command can
-    # be run several times without weird effects.
-    p4 revert -k ...
+    local opt
+    revert=0
+    while getopts ":r" opt; do
+        case $opt in
+            r) revert=1 ;;
+            :) error "option $OPTARG: missing argument" ;;
+            *) error "bad option: $OPTARG" ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+
+    # If requested, reset perforce state but keep all files as-is on disk.
+    # This way this command can be run several times without weird effects.
+    if (( revert )); then
+        p4 revert -k ...
+    fi
 
     # Accumulate failed commands into temporary file.
     local failed_commands
