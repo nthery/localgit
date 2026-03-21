@@ -401,5 +401,50 @@ test_git_stash_lg_import_dirty_working_tree()
     assert "git diff | grep '+AAA'"
 }
 
+test_git_stash_lg_import_dirty_index()
+{
+    lg init
+
+    echo AAA > a
+    lg import a
+
+    # Stage a change without committing.
+    echo BBB >> a
+    git add a
+
+    # Import another file.
+    echo CCC > b
+    lg import b
+
+    # The staged change should still be in the index.
+    assert "git diff --cached | grep '+BBB'"
+}
+
+test_git_stash_lg_import_dirty_index_and_working_tree()
+{
+    lg init
+
+    echo AAA > a
+    echo BBB > b
+    lg import a b
+
+    # Stage a change to a.
+    echo CCC >> a
+    git add a
+
+    # Make an unstaged change to b.
+    echo DDD >> b
+
+    # Import another file.
+    echo EEE > c
+    lg import c
+
+    # The staged change should still be in the index.
+    assert "git diff --cached | grep '+CCC'"
+
+    # The unstaged change should still be in the working tree.
+    assert "git diff | grep '+DDD'"
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"

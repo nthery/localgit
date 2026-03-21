@@ -267,7 +267,7 @@ lg_import()
 
     local must_unstash
     must_unstash=0
-    if ! git diff --quiet; then
+    if ! git diff-index --quiet HEAD; then
         git stash push -m "lg-import: $*"
         must_unstash=1
     fi
@@ -300,7 +300,7 @@ lg_import()
     fi
 
     if (( must_unstash )); then
-        git stash pop
+        git stash pop --index
     fi
 }
 
