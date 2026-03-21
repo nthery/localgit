@@ -11,7 +11,8 @@ set -e
 
 source test_lib.bash
 
-readonly lg_bin="$(pwd)/localgit"
+lg_bin="$(pwd)/localgit"
+readonly lg_bin
 [[ -x "$lg_bin" ]] || error "must run from localgit root"
 
 lg()
@@ -230,15 +231,15 @@ test_lg_import_rebases_all_branches()
     # Verify new_file exists in main
     git checkout main
     assert '[[ -f new_file ]]'
-    assert 'grep -q 'new_content' new_file'
+    assert 'grep -q new_content new_file'
     
     # Verify new_file exists in dev and commits are preserved
     git checkout dev
     assert '[[ -f new_file ]]'
     assert '[[ -f file1 ]]'
     assert '[[ -f file2 ]]'
-    assert 'grep -q 'content1' file1'
-    assert 'grep -q 'content2' file2'
+    assert 'grep -q content1 file1'
+    assert 'grep -q content2 file2'
     
     # Verify new_file exists in dev_bis and commits are preserved
     git checkout dev_bis
@@ -246,14 +247,14 @@ test_lg_import_rebases_all_branches()
     assert '[[ -f file1 ]]'
     assert '[[ -f file2 ]]'
     assert '[[ -f file3 ]]'
-    assert 'grep -q 'content3' file3'
+    assert 'grep -q content3 file3'
     
     # Verify new_file exists in dev_ter and commits are preserved
     git checkout dev_ter
     assert '[[ -f new_file ]]'
     assert '[[ -f file1 ]]'
     assert '[[ -f file4 ]]'
-    assert 'grep -q 'content4' file4'
+    assert 'grep -q content4 file4'
     assert '! [[ -f file2 ]]'  # file2 should not exist in dev_ter
     
     # Verify branch structure is maintained
@@ -509,7 +510,7 @@ test_lg_p4_export()
     setup_mock_p4
     lg p4 export
 
-    assert "(( $(wc -l <$P4_MOCK_LOG) == 8 ))"
+    assert "(( $(wc -l <"$P4_MOCK_LOG") == 8 ))"
     assert "grep '^info$' $P4_MOCK_LOG"
     assert "grep '^edit a$' $P4_MOCK_LOG"
     assert "grep '^delete b$' $P4_MOCK_LOG"
