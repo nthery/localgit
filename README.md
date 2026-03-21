@@ -84,10 +84,46 @@ existing local git repo in this new workspace.
 `lg clone` leaves local modifications unchanged.  They can be integrated with
 `lg sync`.
 
+## Command reference
+
+| Command | Description |
+|---------|-------------|
+| `init` | Create a local git repo with a `dev` topic branch. |
+| `import` / `i` | Add file(s) to the local git.  `-a` rebases all topic branches. |
+| `sync` | After pulling from the foreign SCM (while on `main`), commit all modified tracked files. |
+| `clone` | Clone an existing localgit repo into another workspace. |
+| `files` / `f` | List files changed in the topic branch vs `main` (`edit`/`add`/`delete`). |
+| `log` | Show commits in the topic branch only. |
+| `status` / `s` | Show status of tracked files. |
+| `p4 export` | Reflect topic-branch changes into the Perforce default changelist. |
+| `p4 dry-export` | Print `p4` commands that `export` would run. |
+| `help` | Print usage. |
+
+## Environment variables
+
+- `LG_GIT_DIR_PREFIX` — when set, `init` and `clone` store the actual `.git`
+  directory under this prefix (e.g. `$LG_GIT_DIR_PREFIX/<name>.git`) instead of
+  in the workspace.  A `.git` *file* containing a `gitdir:` line is left in the
+  workspace as a git-level symbolic link pointing to the real location.  This is
+  useful to keep the workspace clean for the foreign SCM.
+
 ## Under the hood
 
-`lg import` first creates a commit in the `main` branch that adds the specified
-file, then rebase the current topic branch.
+`localgit` uses two kinds of git branches:
 
-`lg sync` creates a commit in the `main` branch that updates all files in local
-git that have been changed by other SCM.
+- **`main`** — tracks the baseline state of files as they exist in the foreign
+  SCM.  Users should never commit directly to this branch.  Only `lg import`
+  and `lg sync` modify it.
+- **Topic branches** (e.g. `dev`, created by `lg init`) — where local changes
+  live.  These branches are periodically rebased onto `main` so that local
+  edits stay on top of the foreign SCM baseline.
+
+The typical lifecycle looks like this:
+
+1. `lg import` checks out `main`, commits the new file there, then switches
+   back to the topic branch and rebases it onto `main`.
+2. The user edits and commits on the topic branch using regular git commands.
+3. When the foreign SCM is updated, the user checks out `main` and runs
+   `lg sync`, which commits all modified tracked files to `main`.
+4. The user then rebases topic branches onto the updated `main`
+   (`git rebase main`).
