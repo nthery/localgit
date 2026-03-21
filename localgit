@@ -449,7 +449,7 @@ emit_p4_export_commands()
 {
     expect_topic
 
-    git diff "$main_branch..HEAD" | awk '
+    git diff --find-renames "$main_branch..HEAD" | awk '
         function flush() { if (from != "") { print "edit", from; from = to = "" } }
         /^diff/ { flush(); from = substr($3, 3); to = substr($4, 3) }
         /^new file/ { print("add", from); from = to = "" }
