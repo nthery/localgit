@@ -446,5 +446,112 @@ test_git_stash_lg_import_dirty_index_and_working_tree()
     assert "git diff | grep '+DDD'"
 }
 
+# Create a mock p4 script that logs commands to a file.
+# Sets LG_P4_CMD, P4_MOCK_CLIENT_ROOT and P4_MOCK_LOG for use in tests.
+setup_mock_p4()
+{
+    local -r mock_dir="$(pwd)/mock_p4_bin"
+    mkdir "$mock_dir"
+    P4_MOCK_LOG="$(pwd)/p4_calls.log"
+    true > "$P4_MOCK_LOG"
+    export P4_MOCK_LOG
+
+    cat > "$mock_dir/fake_p4" <<'MOCK'
+#!/bin/bash
+echo "$@" >> "$P4_MOCK_LOG"
+if [[ "$1" == "info" ]]; then
+    # p4_root() extracts "Client root:" from "p4 info" output, then
+    # lg_p4_export() pushd's into it.  P4_MOCK_CLIENT_ROOT lets the test
+    # control that directory so the pushd succeeds.
+    echo "Client root: $P4_MOCK_CLIENT_ROOT"
+fi
+MOCK
+    chmod +x "$mock_dir/fake_p4"
+    export LG_P4_CMD="$mock_dir/fake_p4"
+    export P4_MOCK_CLIENT_ROOT="$(pwd)"
+}
+
+teardown_mock_p4()
+{
+    unset LG_P4_CMD P4_MOCK_CLIENT_ROOT P4_MOCK_LOG
+}
+
+test_lg_p4_export()
+{
+    echo AAA > a
+    echo BBB > b
+    echo DDD > d
+    echo EEE > e
+    mkdir subdir
+
+    lg init
+
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    lg import b
+    git rm b
+    git commit -am 'rm b'
+
+    echo CCC > c
+    git add c
+    git commit -am 'add c'
+
+    lg import d
+    git mv d x
+    git commit -am 'd -> x'
+
+    lg import e
+    git mv e subdir/e
+    git commit -am 'e -> subdir/e'
+
+    setup_mock_p4
+    lg p4 export
+
+    assert "(( $(wc -l <$P4_MOCK_LOG) == 8 ))"
+    assert "grep '^info$' $P4_MOCK_LOG"
+    assert "grep '^edit a$' $P4_MOCK_LOG"
+    assert "grep '^delete b$' $P4_MOCK_LOG"
+    assert "grep '^add c$' $P4_MOCK_LOG"
+    assert "grep '^edit d$' $P4_MOCK_LOG"
+    assert "grep '^move d x$' $P4_MOCK_LOG"
+    assert "grep '^edit e$' $P4_MOCK_LOG"
+    assert "grep '^move e subdir/e$' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
+test_lg_p4_export_with_revert()
+{
+    echo AAA > a
+    lg init
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    setup_mock_p4
+    lg p4 export -r
+
+    assert "grep '^revert -k \.\.\.$' $P4_MOCK_LOG"
+    assert "grep '^edit a$' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
+test_lg_p4_export_escapes_at_sign()
+{
+    lg init
+
+    echo AAA > 'file@2'
+    lg import 'file@2'
+    echo BBB >> 'file@2'
+    git commit -am 'edit file@2'
+
+    setup_mock_p4
+    lg p4 export
+
+    assert "grep '^edit file%402$' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"

@@ -431,12 +431,15 @@ lg_clone()
 # p4 command and subcommands
 ##############################################################################
 
+# LG_P4_CMD is used to mock p4 binary for testing.
+p4_cmd="${LG_P4_CMD:-p4}"
+
 p4_root()
 {
-    type p4 >/dev/null 2>&1 || error "cannot find p4 executable in path"
+    type "$p4_cmd" >/dev/null 2>&1 || error "cannot find p4 executable in path"
 
     local root
-    root="$(p4 info | sed -n 's/^Client root: //p')"
+    root="$($p4_cmd info | sed -n 's/^Client root: //p')"
     [[ -n "$root" ]] || error "cannot find p4 client root"
 
     echo "$root"
@@ -481,7 +484,7 @@ lg_p4_export()
     # If requested, reset perforce state but keep all files as-is on disk.
     # This way this command can be run several times without weird effects.
     if (( revert )); then
-        p4 revert -k ...
+        $p4_cmd revert -k ...
     fi
 
     # Accumulate failed commands into temporary file.
@@ -500,8 +503,8 @@ lg_p4_export()
         set +e
         # Intentionally not quoting variable on next line to pass several arguments to p4.
         # shellcheck disable=SC2086
-        if ! p4 $cmd; then
-            echo "p4 $cmd" >> "$failed_commands"
+        if ! $p4_cmd $cmd; then
+            echo "$p4_cmd $cmd" >> "$failed_commands"
         fi
         set -e
     done
