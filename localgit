@@ -428,6 +428,79 @@ lg_clone()
 }
 
 ##############################################################################
+# apply command
+##############################################################################
+
+commands="${commands}apply - apply a patch, importing files as needed\n"
+
+lg_apply()
+{
+    expect_topic
+
+    (( $# > 0 )) || error "usage: apply [git-apply-options...] <patch-file>"
+
+    # Last argument is the patch file; everything else is forwarded to git apply.
+    local -r patch="${!#}"
+    local -a apply_opts=("${@:1:$#-1}")
+
+    [[ -f "$patch" ]] || error "patch file not found: $patch"
+
+    # Parse patch to determine which files need importing.
+    local -a files_to_import=()
+    local file="" kind=""
+    while IFS= read -r line; do
+        case "$line" in
+            "diff --git "*)
+                # Flush previous entry.
+                if [[ -n "$file" && "$kind" != "new" ]]; then
+                    if ! all_files | grep -qw "$file"; then
+                        [[ -f "$file" ]] || error "file not found in workspace: $file"
+                        files_to_import+=("$file")
+                    fi
+                fi
+                file="${line#diff --git a/}"
+                file="${file%% b/*}"
+                kind="edit"
+                ;;
+            "new file mode"*)
+                kind="new"
+                ;;
+            "deleted file mode"*)
+                kind="delete"
+                ;;
+            "rename from "*)
+                file="${line#rename from }"
+                kind="rename"
+                ;;
+        esac
+    done < "$patch"
+
+    # Flush last entry.
+    if [[ -n "$file" && "$kind" != "new" ]]; then
+        if ! all_files | grep -qw "$file"; then
+            [[ -f "$file" ]] || error "file not found in workspace: $file"
+            files_to_import+=("$file")
+        fi
+    fi
+
+    # De-duplicate.
+    local -a unique_files=()
+    if (( ${#files_to_import[@]} > 0 )); then
+        while IFS= read -r f; do
+            unique_files+=("$f")
+        done < <(printf '%s\n' "${files_to_import[@]}" | sort -u)
+    fi
+
+    # Import files that are not yet tracked.
+    if (( ${#unique_files[@]} > 0 )); then
+        lg_import "${unique_files[@]}"
+    fi
+
+    # Apply the patch.
+    git apply "${apply_opts[@]}" "$patch"
+}
+
+##############################################################################
 # p4 command and subcommands
 ##############################################################################
 
@@ -572,6 +645,7 @@ case "$cmd" in
     f|files)    lg_files "$@" ;;
     log)        lg_log "$@" ;;
     clone)      lg_clone "$@" ;;
+    a|apply)    lg_apply "$@" ;;
     p4)         lg_p4 "$@" ;;
     help)       usage ;;
     *)          usage "unknown command: $cmd" ;;

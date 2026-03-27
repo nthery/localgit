@@ -554,5 +554,300 @@ test_lg_p4_export_escapes_at_sign()
     teardown_mock_p4
 }
 
+test_lg_apply_edit_not_yet_imported()
+{
+    # Create a file and initialize localgit but do NOT import the file.
+    echo AAA > a
+    lg init
+
+    # Generate a patch that edits the file (need a temp repo to produce the diff).
+    mkdir ../patch_src1
+    pushd ../patch_src1
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    echo BBB >> a
+    git diff > ../the.patch
+    git checkout -- a
+    popd
+
+    local -r main_before=$(git rev-parse main)
+
+    # Apply the patch via lg apply.
+    lg apply ../the.patch
+
+    # The file should have been imported into main.
+    assert "all_files_in_main | grep -qw a"
+
+    # The import should have added a commit on main.
+    assert '[[ "$(git rev-parse main)" != "$main_before" ]]'
+    assert 'git log --oneline main | grep -q "lg: import a"'
+
+    # The topic branch should be rebased on top of the new main.
+    assert 'git merge-base --is-ancestor main HEAD'
+
+    # The patch should have been applied on the topic branch.
+    assert "grep -q BBB a"
+}
+
+test_lg_apply_new_file()
+{
+    lg init
+
+    # Generate a patch that adds a brand-new file.
+    mkdir ../patch_src2
+    pushd ../patch_src2
+    git init --initial-branch=main
+    git commit --allow-empty -m 'baseline'
+    echo NEW > b
+    git add b
+    git diff --cached > ../the.patch
+    popd
+
+    # Record main branch tip before apply.
+    local -r main_before=$(git rev-parse main)
+
+    lg apply ../the.patch
+
+    # main should be unchanged (no import for new files).
+    assert '[[ "$(git rev-parse main)" == "$main_before" ]]'
+
+    # The new file should exist in the working tree.
+    assert "[[ -f b ]]"
+    assert "grep -q NEW b"
+}
+
+test_lg_apply_rename()
+{
+    echo AAA > a
+    lg init
+
+    # Generate a patch that renames a -> b (with rename detection).
+    mkdir ../patch_src3
+    pushd ../patch_src3
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    git mv a b
+    git diff --cached -M > ../the.patch
+    popd
+
+    local -r main_before=$(git rev-parse main)
+
+    lg apply ../the.patch
+
+    # The old file should have been imported into main.
+    assert "all_files_in_main | grep -qw a"
+    assert '[[ "$(git rev-parse main)" != "$main_before" ]]'
+    assert 'git log --oneline main | grep -q "lg: import a"'
+    assert 'git merge-base --is-ancestor main HEAD'
+
+    # After applying, b should exist and a should be gone.
+    assert "[[ -f b ]]"
+    assert "! [[ -f a ]]"
+    assert "grep -q AAA b"
+}
+
+test_lg_apply_rename_no_detect()
+{
+    echo AAA > a
+    lg init
+
+    # Generate a patch that renames a -> b WITHOUT rename detection (delete + add).
+    mkdir ../patch_src4
+    pushd ../patch_src4
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    git mv a b
+    git diff --cached --no-renames > ../the.patch
+    popd
+
+    local -r main_before=$(git rev-parse main)
+
+    lg apply ../the.patch
+
+    # The old file should have been imported (needed for the delete half).
+    assert "all_files_in_main | grep -qw a"
+    assert '[[ "$(git rev-parse main)" != "$main_before" ]]'
+    assert 'git log --oneline main | grep -q "lg: import a"'
+    assert 'git merge-base --is-ancestor main HEAD'
+
+    # After applying, b should exist and a should be gone.
+    assert "[[ -f b ]]"
+    assert "! [[ -f a ]]"
+    assert "grep -q AAA b"
+}
+
+test_lg_apply_mixed()
+{
+    echo AAA > a
+    echo BBB > b
+    echo CCC > c
+    lg init
+    lg import b
+
+    # Generate a patch that:
+    # - edits a (not yet imported)
+    # - edits b (already imported)
+    # - adds d (new file)
+    # - deletes c via rename to e (with rename detection)
+    mkdir ../patch_src5
+    pushd ../patch_src5
+    git init --initial-branch=main
+    echo AAA > a
+    echo BBB > b
+    echo CCC > c
+    git add a b c && git commit -m 'baseline'
+    echo AAA2 >> a
+    echo BBB2 >> b
+    git mv c e
+    echo DDD > d
+    git add a b d
+    git diff --cached -M > ../the.patch
+    popd
+
+    local -r main_before=$(git rev-parse main)
+
+    lg apply ../the.patch
+
+    # a and c should have been imported into main.
+    assert "all_files_in_main | grep -qw a"
+    assert "all_files_in_main | grep -qw c"
+    assert '[[ "$(git rev-parse main)" != "$main_before" ]]'
+    assert 'git log --oneline main | grep -q "lg: import"'
+    assert 'git merge-base --is-ancestor main HEAD'
+
+    # a should have been patched.
+    assert "grep -q AAA2 a"
+
+    # b was already imported; patch applied.
+    assert "grep -q BBB2 b"
+
+    # c should have been renamed to e.
+    assert "! [[ -f c ]]"
+    assert "[[ -f e ]]"
+    assert "grep -q CCC e"
+
+    # d is a new file, no import needed.
+    assert "[[ -f d ]]"
+    assert "grep -q DDD d"
+}
+
+test_lg_apply_forwards_options()
+{
+    echo AAA > a
+    lg init
+    lg import a
+
+    # Generate a patch that edits the file.
+    mkdir ../patch_src6
+    pushd ../patch_src6
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    echo BBB >> a
+    git diff > ../the.patch
+    popd
+
+    # --check performs a dry run: verifies the patch applies but does not modify files.
+    lg apply --check ../the.patch
+
+    # The file should be unchanged.
+    assert "! grep -q BBB a"
+}
+
+test_lg_apply_on_main_branch_errors()
+{
+    lg init
+    git checkout main
+    touch dummy.patch
+
+    set +e
+    lg apply dummy.patch > lg_apply.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( $rc != 0 ))'
+    assert 'grep -q "should be in topic branch but in main" lg_apply.out'
+}
+
+test_lg_apply_missing_patch_file()
+{
+    lg init
+
+    # No arguments at all.
+    set +e
+    lg apply > lg_apply.out 2>&1
+    local -r rc1=$?
+    set -e
+    assert '(( $rc1 != 0 ))'
+    assert 'grep -q "usage: apply" lg_apply.out'
+
+    # Non-existent file.
+    set +e
+    lg apply nosuch.patch > lg_apply.out 2>&1
+    local -r rc2=$?
+    set -e
+    assert '(( $rc2 != 0 ))'
+    assert 'grep -q "patch file not found" lg_apply.out'
+}
+
+test_lg_apply_delete_imported_file()
+{
+    echo AAA > a
+    lg init
+    lg import a
+
+    # Generate a patch that deletes the file.
+    mkdir ../patch_src7
+    pushd ../patch_src7
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    git rm a
+    git diff --cached > ../the.patch
+    popd
+
+    lg apply ../the.patch
+
+    # The file should be gone from the working tree.
+    assert "! [[ -f a ]]"
+}
+
+test_lg_apply_edit_already_imported()
+{
+    echo AAA > a
+    lg init
+    lg import a
+
+    # Generate a patch that edits the file.
+    mkdir ../patch_src8
+    pushd ../patch_src8
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    echo BBB >> a
+    git diff > ../the.patch
+    git checkout -- a
+    popd
+
+    # Record main branch tip before apply.
+    local -r main_before=$(git rev-parse main)
+
+    lg apply ../the.patch
+
+    # main should be unchanged (no extra import).
+    assert '[[ "$(git rev-parse main)" == "$main_before" ]]'
+
+    # The patch should have been applied on the topic branch.
+    assert "grep -q BBB a"
+}
+
+# Helper: list all files in main (mirrors all_files in localgit).
+all_files_in_main()
+{
+    git ls-tree --full-tree -r main | awk '{print $4}' | grep -vw .lg
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"

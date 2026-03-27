@@ -92,6 +92,7 @@ existing local git repo in this new workspace.
 | `import` / `i` | Add file(s) to the local git.  `-a` rebases all topic branches. |
 | `sync` | After pulling from the foreign SCM (while on `main`), commit all modified tracked files. |
 | `clone` | Clone an existing localgit repo into another workspace. |
+| `apply` / `a` | Apply a patch, automatically importing files as needed. |
 | `files` / `f` | List files changed in the topic branch vs `main` (`edit`/`add`/`delete`). |
 | `log` | Show commits in the topic branch only. |
 | `status` / `s` | Show status of tracked files. |
