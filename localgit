@@ -100,6 +100,24 @@ all_files()
     git ls-tree --full-tree -r "$main_branch" | awk '{print $4}' | grep -vw .lg
 }
 
+# Wrapper around git rebase that tolerates .git/rebase-merge cleanup failures
+# on NFS.  If the rebase itself succeeded (git prints "Successfully rebased")
+# but the exit code is non-zero, manually remove the leftover directory.
+git_rebase()
+{
+    local output
+    local rc=0
+    output=$(git rebase "$@" 2>&1) || rc=$?
+    echo "$output"
+    if (( rc != 0 )); then
+        if echo "$output" | grep -q "Successfully rebased"; then
+            rm -rf "$(git rev-parse --git-dir)/rebase-merge"
+        else
+            return $rc
+        fi
+    fi
+}
+
 # Print root of git repo.
 git_root() {
     git rev-parse --show-toplevel
@@ -290,13 +308,13 @@ lg_import()
         for branch in $branches; do
             echo "Rebasing branch: $branch"
             git checkout "$branch"
-            git rebase "$main_branch"
+            git_rebase "$main_branch"
         done
-        
+
         git checkout "$topic"
     else
         git checkout "$topic"
-        git rebase "$main_branch"
+        git_rebase "$main_branch"
     fi
 
     if (( must_unstash )); then
