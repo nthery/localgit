@@ -66,9 +66,9 @@ usage()
 # Keep support for localgit repos created before renaming from master to main.
 detect_main_branch()
 {
-    if git branch | grep -qw "master"; then
+    if git show-ref --verify --quiet refs/heads/master; then
         echo "master"
-    elif git branch | grep -qw "main"; then
+    elif git show-ref --verify --quiet refs/heads/main; then
         echo "main"
     else
         error "can not find main nor master branch"
@@ -91,7 +91,7 @@ expect_main()
 
 current_branch()
 {
-    git branch | grep '^\*' | cut -d' ' -f2
+    git rev-parse --abbrev-ref HEAD
 }
 
 # Print all files in repo.
@@ -148,7 +148,7 @@ portable_realpath()
     link=$(readlink "$(basename "$path")")
     while [[ -n "$link" ]]; do
         cd "$(dirname "$link")"
-        link=$(readlink "$(basename "$path")")
+        link=$(readlink "$(basename "$link")")
     done
     local -r real="$(pwd)/$(basename "$path")"
     cd "$saved_cwd"
@@ -299,17 +299,22 @@ lg_import()
     # arbitrary path that may for example contain '..'.
     # Work around this for the time being by absorbing the "nothing to commit"
     # error to avoid bailing out while in main.
-    git commit -m "$log" || true
+    local commit_output
+    local commit_rc=0
+    commit_output=$(git commit -m "$log" 2>&1) || commit_rc=$?
+    if (( commit_rc != 0 )); then
+        if ! echo "$commit_output" | grep -q "nothing to commit"; then
+            echo "$commit_output" >&2
+            return $commit_rc
+        fi
+    fi
 
     if (( rebase_all )); then
-        local branches
-        branches=$(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v "^$main_branch$")
-        
-        for branch in $branches; do
+        while IFS= read -r branch; do
             echo "Rebasing branch: $branch"
             git checkout "$branch"
             git_rebase "$main_branch"
-        done
+        done < <(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v "^${main_branch}$")
 
         git checkout "$topic"
     else
@@ -474,16 +479,22 @@ lg_apply()
     # Parse patch to determine which files need importing.
     local -a files_to_import=()
     local file="" kind=""
+
+    # If current file needs importing, add it to files_to_import.
+    flush_file_entry()
+    {
+        if [[ -n "$file" && "$kind" != "new" ]]; then
+            if ! all_files | grep -qw "$file"; then
+                [[ -f "$file" ]] || error "file not found in workspace: $file"
+                files_to_import+=("$file")
+            fi
+        fi
+    }
+
     while IFS= read -r line; do
         case "$line" in
             "diff --git "*)
-                # Flush previous entry.
-                if [[ -n "$file" && "$kind" != "new" ]]; then
-                    if ! all_files | grep -qw "$file"; then
-                        [[ -f "$file" ]] || error "file not found in workspace: $file"
-                        files_to_import+=("$file")
-                    fi
-                fi
+                flush_file_entry
                 file="${line#diff --git a/}"
                 file="${file%% b/*}"
                 kind="edit"
@@ -501,13 +512,7 @@ lg_apply()
         esac
     done < "$abs_patch"
 
-    # Flush last entry.
-    if [[ -n "$file" && "$kind" != "new" ]]; then
-        if ! all_files | grep -qw "$file"; then
-            [[ -f "$file" ]] || error "file not found in workspace: $file"
-            files_to_import+=("$file")
-        fi
-    fi
+    flush_file_entry
 
     # De-duplicate.
     local -a unique_files=()
@@ -588,11 +593,10 @@ lg_p4_export()
 
     # Accumulate failed commands into temporary file.
     local failed_commands
-    failed_commands="/tmp/lg_p4_export.failed_commands.$$"
+    failed_commands="$(mktemp)" || error "cannot create temporary file"
     # We want to expand now rather than at exit-time as exit could be called from caller.
     # shellcheck disable=SC2064
-    trap "rm $failed_commands" EXIT
-    true > "$failed_commands"
+    trap "rm -f '$failed_commands'" EXIT
 
     emit_p4_export_commands | escape_p4_path | while read -r cmd
     do

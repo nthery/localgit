@@ -59,6 +59,18 @@ test_lg_init_opt_n_creates_named_remote_git_dir_when_prefix_env_var_set()
     unset LG_GIT_DIR_PREFIX
 }
 
+test_lg_init_resolves_chained_symlinks_in_prefix()
+{
+    ln -s ../backup link1
+    ln -s link1 link2
+    export LG_GIT_DIR_PREFIX=link2
+    lg init
+    unset LG_GIT_DIR_PREFIX
+    assert "[[ -f .git ]]"
+    assert "grep -q backup .git"
+    assert "git log --oneline | grep 'lg: big bang'"
+}
+
 test_create_original_clones()
 {
     mkdir ../original_clone_with_local_git_dir

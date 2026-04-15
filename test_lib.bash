@@ -7,8 +7,10 @@
 # See "public interface" section below for usage.
 #
 
-readonly progname=$(basename "$0")
-readonly fullprogname="$(pwd)/$progname"
+progname=$(basename "$0")
+readonly progname
+fullprogname="$(pwd)/$progname"
+readonly fullprogname
 
 ##############################################################################
 # INTERNALS
@@ -30,12 +32,12 @@ start_test()
     log "=============================================================================="
     log " starting $1"
     mkdir "$1"
-    pushd "$1"
+    pushd "$1" || error "pushd failed: $1"
 }
 
 end_test()
 {
-    popd
+    popd || error "popd failed"
     log "completed $1"
 }
 
@@ -76,7 +78,7 @@ run_tests()
     rm -rf "$test_root" || true
     mkdir "$test_root"
 
-    pushd "$test_root"
+    pushd "$test_root" || error "pushd failed: $test_root"
 
     grep "$test_re" "$fullprogname" | while read -r test_fn; do
         export test_name="${test_fn/()}"
@@ -85,7 +87,7 @@ run_tests()
         end_test "$test_name"
     done
 
-    popd # "$test_root"
+    popd || error "popd failed"  # "$test_root"
 
     log "SUCCESS :-)"
     rm -rf "$test_root"
