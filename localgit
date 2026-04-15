@@ -463,6 +463,14 @@ lg_apply()
 
     [[ -f "$patch" ]] || error "patch file not found: $patch"
 
+    # Resolve patch path to absolute before changing to repo root, so that
+    # relative paths still work.
+    local -r abs_patch="$(xrealpath "$patch")"
+
+    # Work from the repo root so that repo-relative paths parsed from the
+    # patch resolve correctly even when invoked from a subdirectory.
+    cd "$(git_root)"
+
     # Parse patch to determine which files need importing.
     local -a files_to_import=()
     local file="" kind=""
@@ -491,7 +499,7 @@ lg_apply()
                 kind="rename"
                 ;;
         esac
-    done < "$patch"
+    done < "$abs_patch"
 
     # Flush last entry.
     if [[ -n "$file" && "$kind" != "new" ]]; then
@@ -515,7 +523,7 @@ lg_apply()
     fi
 
     # Apply the patch.
-    git apply "${apply_opts[@]}" "$patch"
+    git apply "${apply_opts[@]}" "$abs_patch"
 }
 
 ##############################################################################

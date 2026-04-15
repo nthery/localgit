@@ -843,6 +843,36 @@ test_lg_apply_edit_already_imported()
     assert "grep -q BBB a"
 }
 
+test_lg_apply_from_subdirectory()
+{
+    mkdir sub
+    echo AAA > sub/a
+    lg init
+
+    # Generate a patch that edits sub/a.
+    mkdir ../patch_src9
+    pushd ../patch_src9
+    git init --initial-branch=main
+    mkdir sub
+    echo AAA > sub/a
+    git add sub/a && git commit -m 'baseline'
+    echo BBB >> sub/a
+    git diff > ../the.patch
+    git checkout -- sub/a
+    popd
+
+    # Run lg apply from the subdirectory, not the repo root.
+    pushd sub
+    lg apply ../../the.patch
+    popd
+
+    # The file should have been imported into main.
+    assert "all_files_in_main | grep -qw sub/a"
+
+    # The patch should have been applied on the topic branch.
+    assert "grep -q BBB sub/a"
+}
+
 # Helper: list all files in main (mirrors all_files in localgit).
 all_files_in_main()
 {
