@@ -885,6 +885,27 @@ test_lg_apply_from_subdirectory()
     assert "grep -q BBB sub/a"
 }
 
+test_lg_import_file_committed_on_dev()
+{
+    lg init
+
+    # Create a new file and commit it on the dev branch.
+    echo AAA > a
+    git add a
+    git commit -m 'add a on dev'
+
+    # lg import should reject a file already committed on the topic branch.
+    set +e
+    lg import a > lg_import.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "file already committed on topic branch: a" lg_import.out'
+
+    # We should still be on the dev branch (no state change).
+    assert "git branch | grep '\* dev'"
+}
+
 # Helper: list all files in main (mirrors all_files in localgit).
 all_files_in_main()
 {

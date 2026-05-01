@@ -250,6 +250,9 @@ lg_import()
         if all_files | grep -q -w "$f"; then
             error "file already baselined: $f"
         fi
+        if git ls-files "$f" | grep -q .; then
+            error "file already committed on topic branch: $f"
+        fi
     done
 
     # Error out if some files are not descendants of the repo root.
