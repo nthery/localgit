@@ -477,6 +477,10 @@ if [[ "$1" == "info" ]]; then
     # lg_p4_export() pushd's into it.  P4_MOCK_CLIENT_ROOT lets the test
     # control that directory so the pushd succeeds.
     echo "Client root: $P4_MOCK_CLIENT_ROOT"
+elif [[ "$1" == "have" ]]; then
+    if [[ -n "$P4_MOCK_HAVE_OUTPUT" && -f "$P4_MOCK_HAVE_OUTPUT" ]]; then
+        cat "$P4_MOCK_HAVE_OUTPUT"
+    fi
 fi
 MOCK
     chmod +x "$mock_dir/fake_p4"
@@ -486,7 +490,18 @@ MOCK
 
 teardown_mock_p4()
 {
-    unset LG_P4_CMD P4_MOCK_CLIENT_ROOT P4_MOCK_LOG
+    unset LG_P4_CMD P4_MOCK_CLIENT_ROOT P4_MOCK_LOG P4_MOCK_HAVE_OUTPUT
+}
+
+write_mock_p4_have()
+{
+    P4_MOCK_HAVE_OUTPUT="$(pwd)/p4_have.out"
+    export P4_MOCK_HAVE_OUTPUT
+    local n=1
+    for f in "$@"; do
+        echo "//depot/mock/path#$n - $f" >> "$P4_MOCK_HAVE_OUTPUT"
+        n=$((n + 1))
+    done
 }
 
 test_lg_p4_export()
@@ -910,6 +925,140 @@ test_lg_import_file_committed_on_dev()
 all_files_in_main()
 {
     git ls-tree --full-tree -r main | awk '{print $4}' | grep -vw .lg
+}
+
+test_lg_p4_import_basic()
+{
+    echo AAA > a
+    echo BBB > b
+    mkdir subdir
+    echo CCC > subdir/c
+
+    lg init
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/a" "$(pwd)/b" "$(pwd)/subdir/c"
+    lg p4 import .
+
+    assert "all_files_in_main | grep -Fx a"
+    assert "all_files_in_main | grep -Fx b"
+    assert "all_files_in_main | grep -Fx subdir/c"
+    assert "grep '^have ' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
+test_lg_p4_import_filters_already_imported()
+{
+    echo AAA > a
+    echo BBB > b
+
+    lg init
+    lg import a
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/a" "$(pwd)/b"
+    lg p4 import .
+
+    assert "all_files_in_main | grep -Fx b"
+
+    # Only one new commit on main (for b), not two.
+    local -r count=$(git log --oneline main | wc -l)
+    # init commit + import a + import b = 3
+    assert "(( count == 3 ))"
+    teardown_mock_p4
+}
+
+test_lg_p4_import_all_already_imported()
+{
+    echo AAA > a
+
+    lg init
+    lg import a
+
+    local -r sha_before=$(git rev-parse main)
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/a"
+    local output
+    output=$(lg p4 import .)
+
+    assert '[[ "$output" == *"all files already imported"* ]]'
+    assert '[[ "$(git rev-parse main)" == "$sha_before" ]]'
+    teardown_mock_p4
+}
+
+test_lg_p4_import_no_files_synced()
+{
+    lg init
+
+    setup_mock_p4
+    local output
+    output=$(lg p4 import .)
+
+    assert '[[ "$output" == *"no files synced"* ]]'
+    teardown_mock_p4
+}
+
+test_lg_p4_import_nonexistent_directory()
+{
+    lg init
+
+    setup_mock_p4
+    set +e
+    lg p4 import nosuchdir > p4imp.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "directory not found" p4imp.out'
+    teardown_mock_p4
+}
+
+test_lg_p4_import_missing_argument()
+{
+    lg init
+
+    setup_mock_p4
+    set +e
+    lg p4 import > p4imp.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "usage:" p4imp.out'
+    teardown_mock_p4
+}
+
+test_lg_p4_import_subdirectory()
+{
+    echo AAA > a
+    mkdir subdir
+    echo BBB > subdir/b
+
+    lg init
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/subdir/b"
+    lg p4 import subdir
+
+    assert "all_files_in_main | grep -Fx subdir/b"
+    assert "! all_files_in_main | grep -Fx a"
+    teardown_mock_p4
+}
+
+test_lg_p4_import_multiple_directories()
+{
+    mkdir dir1 dir2
+    echo AAA > dir1/a
+    echo BBB > dir2/b
+
+    lg init
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/dir1/a" "$(pwd)/dir2/b"
+    lg p4 import dir1 dir2
+
+    assert "all_files_in_main | grep -Fx dir1/a"
+    assert "all_files_in_main | grep -Fx dir2/b"
+    teardown_mock_p4
 }
 
 unset LG_GIT_DIR_PREFIX

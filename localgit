@@ -636,6 +636,76 @@ lg_p4_dry_export()
     done
 }
 
+commands="${commands}p4 import  - import all p4 files under directories into local git\n"
+
+lg_p4_import()
+{
+    local -a import_opts=()
+    local opt
+    OPTIND=1
+    while getopts ":a" opt; do
+        case $opt in
+            a) import_opts+=("-a") ;;
+            :) error "option $OPTARG: missing argument" ;;
+            *) error "bad option: $OPTARG" ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+
+    (( $# >= 1 )) || error "usage: p4 import [-a] <directory>..."
+    local dir
+    for dir in "$@"; do
+        [[ -d "$dir" ]] || error "directory not found: $dir"
+    done
+
+    # p4 have output format: //depot/path/file#rev - /local/path/file
+    local -a local_paths=()
+    for dir in "$@"; do
+        local abs_dir
+        abs_dir="$(xrealpath "$dir")"
+
+        local have_output
+        set +e
+        have_output=$($p4_cmd have "$abs_dir/..." 2>/dev/null)
+        set -e
+
+        if [[ -n "$have_output" ]]; then
+            while IFS= read -r line; do
+                local_paths+=("${line##* - }")
+            done <<< "$have_output"
+        fi
+    done
+
+    if (( ${#local_paths[@]} == 0 )); then
+        echo "no files synced under specified directories"
+        return 0
+    fi
+
+    local -r root="$(git_root)"
+    local tracked_files
+    tracked_files=$(all_files || true)
+
+    # Filter out files already in main branch.
+    # lg_import's own "already baselined" check uses repo-relative paths and
+    # would not match the absolute paths we pass, so we must pre-filter here.
+    local -a to_import=()
+    for p in "${local_paths[@]}"; do
+        local rel="${p#"$root"/}"
+        if ! echo "$tracked_files" | grep -q -Fx "$rel"; then
+            to_import+=("$p")
+        fi
+    done
+
+    if (( ${#to_import[@]} == 0 )); then
+        echo "all files already imported"
+        return 0
+    fi
+
+    # Reset OPTIND so lg_import's getopts starts from the right position.
+    OPTIND=1
+    lg_import "${import_opts[@]}" "${to_import[@]}"
+}
+
 lg_p4()
 {
     local -r subcmd="$1"
@@ -646,6 +716,9 @@ lg_p4()
         export)
             shift 1
             lg_p4_export "$@" ;;
+        import)
+            shift 1
+            lg_p4_import "$@" ;;
         *)
             error "unknown or missing subcommand" ;;
     esac
