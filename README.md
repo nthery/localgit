@@ -96,6 +96,7 @@ existing local git repo in this new workspace.
 | `files` / `f` | List files changed in the topic branch vs `main` (`edit`/`add`/`delete`). |
 | `log` | Show commits in the topic branch only. |
 | `status` / `s` | Show status of tracked files. |
+| `p4 import` | Bulk-import all files synced in Perforce under the given directories. `-a` rebases all topic branches. |
 | `p4 export` | Reflect topic-branch changes into the Perforce default changelist. |
 | `p4 dry-export` | Print `p4` commands that `export` would run. |
 | `help` | Print usage. |
