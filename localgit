@@ -535,6 +535,106 @@ lg_apply()
 }
 
 ##############################################################################
+# cherry-pick command
+##############################################################################
+
+commands="${commands}cherry-pick - cherry-pick commits, importing files as needed\n"
+
+cherry_pick_import_files()
+{
+    local -a files_to_import=()
+    local tracked_files
+    tracked_files=$(all_files || true)
+
+    # shellcheck disable=SC2034
+    while IFS=$'\t' read -r status old_file new_file; do
+        [[ -n "$status" ]] || continue
+        # git outputs status as A, R100, M, etc. (with similarity score for renames).
+        case "$status" in
+            A*)  ;;  # Added: new file, no import needed
+            R*)      # Renamed: import the old name
+                if ! echo "$tracked_files" | grep -qFx "$old_file"; then
+                    [[ -f "$old_file" ]] && files_to_import+=("$old_file")
+                fi
+                ;;
+            *)
+                if ! echo "$tracked_files" | grep -qFx "$old_file"; then
+                    [[ -f "$old_file" ]] && files_to_import+=("$old_file")
+                fi
+                ;;
+        esac
+    done < <(git log --name-status --pretty=format:'' "$@" --)
+
+    # De-duplicate.
+    local -a unique_files=()
+    if (( ${#files_to_import[@]} > 0 )); then
+        while IFS= read -r f; do
+            unique_files+=("$f")
+        done < <(printf '%s\n' "${files_to_import[@]}" | sort -u)
+    fi
+
+    if (( ${#unique_files[@]} > 0 )); then
+        OPTIND=1
+        lg_import "${unique_files[@]}"
+    fi
+}
+
+lg_cherry_pick()
+{
+    expect_topic
+
+    (( $# > 0 )) || error "usage: cherry-pick [git-cherry-pick-options...] <commit>..."
+
+    cd "$(git_root)"
+
+    # Save original args to pass verbatim to git cherry-pick.
+    local -a all_args=("$@")
+
+    # Separate options from commit specs.
+    local -a commit_specs=()
+    local end_of_opts=0
+
+    while (( $# > 0 )); do
+        if (( end_of_opts )); then
+            commit_specs+=("$1")
+            shift
+            continue
+        fi
+        case "$1" in
+            --)
+                end_of_opts=1
+                shift
+                ;;
+            --continue|--skip|--abort|--quit)
+                git cherry-pick "${all_args[@]}"
+                return
+                ;;
+            -m|--mainline|--strategy|-X|--strategy-option)
+                shift 2
+                ;;
+            -*)
+                shift
+                ;;
+            *)
+                commit_specs+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if (( ${#commit_specs[@]} == 0 )); then
+        git cherry-pick "${all_args[@]}"
+        return
+    fi
+
+    cherry_pick_import_files "${commit_specs[@]}"
+
+    tron
+
+    git cherry-pick "${all_args[@]}"
+}
+
+##############################################################################
 # p4 command and subcommands
 ##############################################################################
 
@@ -752,6 +852,7 @@ case "$cmd" in
     log)        lg_log "$@" ;;
     clone)      lg_clone "$@" ;;
     a|apply)    lg_apply "$@" ;;
+    cp|cherry-pick) lg_cherry_pick "$@" ;;
     p4)         lg_p4 "$@" ;;
     help)       usage ;;
     *)          usage "unknown command: $cmd" ;;

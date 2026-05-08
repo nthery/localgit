@@ -1061,5 +1061,228 @@ test_lg_p4_import_multiple_directories()
     teardown_mock_p4
 }
 
+##############################################################################
+# cherry-pick tests
+##############################################################################
+
+test_lg_cherry_pick_imports_untracked_file()
+{
+    # File exists in workspace but is not yet tracked by localgit.
+    echo AAA > a
+    lg init
+
+    # Create a remote repo where a is modified on a dev branch.
+    mkdir ../cp_remote1
+    pushd ../cp_remote1
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline a'
+    git checkout -b dev
+    echo BBB >> a
+    git add a && git commit -m 'modify a'
+    popd
+
+    # Add the remote to our repo and fetch.
+    git remote add other ../cp_remote1
+    git fetch other
+
+    local -r main_before=$(git rev-parse main)
+
+    lg cherry-pick other/dev
+
+    # The file should have been imported into main.
+    assert "all_files_in_main | grep -qFx a"
+
+    # The import should have added a commit on main.
+    assert '[[ "$(git rev-parse main)" != "$main_before" ]]'
+    assert 'git log --oneline main | grep -q "lg: import a"'
+
+    # The topic branch should be rebased on top of the new main.
+    assert 'git merge-base --is-ancestor main HEAD'
+
+    # The cherry-pick should have applied the change.
+    assert "grep -q BBB a"
+}
+
+test_lg_cherry_pick_skips_new_files()
+{
+    lg init
+
+    # Create a remote repo that adds a brand-new file.
+    mkdir ../cp_remote2
+    pushd ../cp_remote2
+    git init --initial-branch=main
+    git commit --allow-empty -m 'baseline'
+    git checkout -b dev
+    echo NEW > b
+    git add b && git commit -m 'add b'
+    popd
+
+    git remote add other ../cp_remote2
+    git fetch other
+
+    local -r main_before=$(git rev-parse main)
+
+    lg cherry-pick other/dev
+
+    # main should be unchanged (no import for new files).
+    assert '[[ "$(git rev-parse main)" == "$main_before" ]]'
+
+    # The new file should exist after cherry-pick.
+    assert "[[ -f b ]]"
+    assert "grep -q NEW b"
+}
+
+test_lg_cherry_pick_all_already_tracked()
+{
+    # File is already imported; no import step needed.
+    echo AAA > a
+    lg init
+    lg import a
+
+    # Create a remote that modifies a.
+    mkdir ../cp_remote3
+    pushd ../cp_remote3
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    git checkout -b dev
+    echo BBB >> a
+    git add a && git commit -m 'modify a'
+    popd
+
+    git remote add other ../cp_remote3
+    git fetch other
+
+    local -r main_before=$(git rev-parse main)
+
+    lg cherry-pick other/dev
+
+    # main should be unchanged (file already tracked).
+    assert '[[ "$(git rev-parse main)" == "$main_before" ]]'
+
+    # The cherry-pick should have applied the change.
+    assert "grep -q BBB a"
+}
+
+test_lg_cherry_pick_forwards_options()
+{
+    # -n (no-commit) should be forwarded to git cherry-pick.
+    echo AAA > a
+    lg init
+    lg import a
+
+    mkdir ../cp_remote4
+    pushd ../cp_remote4
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    git checkout -b dev
+    echo BBB >> a
+    git add a && git commit -m 'modify a'
+    popd
+
+    git remote add other ../cp_remote4
+    git fetch other
+
+    local -r head_before=$(git rev-parse HEAD)
+
+    lg cherry-pick -n other/dev
+
+    # HEAD should not have moved (no commit due to -n).
+    assert '[[ "$(git rev-parse HEAD)" == "$head_before" ]]'
+
+    # But the change should be staged.
+    assert "grep -q BBB a"
+}
+
+test_lg_cherry_pick_range()
+{
+    # Cherry-pick a range of commits that touch two untracked files.
+    echo AAA > a
+    echo XXX > b
+    lg init
+
+    mkdir ../cp_remote5
+    pushd ../cp_remote5
+    git init --initial-branch=main
+    echo AAA > a
+    echo XXX > b
+    git add a b && git commit -m 'baseline'
+    git checkout -b dev
+    echo BBB >> a
+    git add a && git commit -m 'modify a'
+    echo YYY >> b
+    git add b && git commit -m 'modify b'
+    popd
+
+    git remote add other ../cp_remote5
+    git fetch other
+
+    # Get the range boundaries.
+    local -r range_start=$(git rev-parse other/main)
+
+    lg cherry-pick "${range_start}..other/dev"
+
+    # Both files should have been imported.
+    assert "all_files_in_main | grep -qFx a"
+    assert "all_files_in_main | grep -qFx b"
+
+    # Both changes should be applied.
+    assert "grep -q BBB a"
+    assert "grep -q YYY b"
+}
+
+test_lg_cherry_pick_on_main_branch_errors()
+{
+    echo AAA > a
+    lg init
+    git checkout main
+
+    set +e
+    lg cherry-pick HEAD > /dev/null 2>&1
+    local -r rc=$?
+    set -e
+
+    assert '(( rc != 0 ))'
+}
+
+test_lg_cherry_pick_no_args()
+{
+    lg init
+
+    set +e
+    lg cherry-pick > /dev/null 2>&1
+    local -r rc=$?
+    set -e
+
+    assert '(( rc != 0 ))'
+}
+
+test_lg_cherry_pick_abbreviation()
+{
+    # Verify 'cp' abbreviation works.
+    echo AAA > a
+    lg init
+    lg import a
+
+    mkdir ../cp_remote6
+    pushd ../cp_remote6
+    git init --initial-branch=main
+    echo AAA > a
+    git add a && git commit -m 'baseline'
+    git checkout -b dev
+    echo BBB >> a
+    git add a && git commit -m 'modify a'
+    popd
+
+    git remote add other ../cp_remote6
+    git fetch other
+
+    lg cp other/dev
+
+    assert "grep -q BBB a"
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"
