@@ -581,6 +581,161 @@ test_lg_p4_export_escapes_at_sign()
     teardown_mock_p4
 }
 
+test_lg_p4_dry_export_single_commit()
+{
+    echo AAA > a
+    echo BBB > b
+
+    lg init
+
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    lg import b
+    echo BBB >> b
+    git commit -am 'edit b'
+
+    local -r commit_a=$(git log --format=%H -1 HEAD~1)
+    local -r commit_b=$(git log --format=%H -1 HEAD)
+
+    lg p4 dry-export "$commit_a" > out.txt
+    assert "(( $(wc -l <out.txt) == 1 ))"
+    assert "grep '^p4 edit a$' out.txt"
+
+    lg p4 dry-export "$commit_b" > out.txt
+    assert "(( $(wc -l <out.txt) == 1 ))"
+    assert "grep '^p4 edit b$' out.txt"
+}
+
+test_lg_p4_dry_export_commit_range()
+{
+    echo AAA > a
+    echo BBB > b
+
+    lg init
+
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    lg import b
+    echo BBB >> b
+    git commit -am 'edit b'
+
+    echo CCC > c
+    git add c
+    git commit -am 'add c'
+
+    local -r commit_a=$(git log --format=%H -1 HEAD~2)
+    local -r commit_c=$(git log --format=%H -1 HEAD)
+
+    lg p4 dry-export "$commit_a..$commit_c" > out.txt
+    assert "(( $(wc -l <out.txt) == 2 ))"
+    assert "grep '^p4 edit b$' out.txt"
+    assert "grep '^p4 add c$' out.txt"
+}
+
+test_lg_p4_export_single_commit()
+{
+    echo AAA > a
+    echo BBB > b
+
+    lg init
+
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    lg import b
+    echo BBB >> b
+    git commit -am 'edit b'
+
+    local -r commit_b=$(git log --format=%H -1 HEAD)
+
+    setup_mock_p4
+    lg p4 export "$commit_b"
+
+    assert "(( $(wc -l <"$P4_MOCK_LOG") == 2 ))"
+    assert "grep '^info$' $P4_MOCK_LOG"
+    assert "grep '^edit b$' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
+test_lg_p4_export_commit_range()
+{
+    echo AAA > a
+    echo BBB > b
+
+    lg init
+
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    lg import b
+    echo BBB >> b
+    git commit -am 'edit b'
+
+    echo CCC > c
+    git add c
+    git commit -am 'add c'
+
+    local -r commit_a=$(git log --format=%H -1 HEAD~2)
+    local -r commit_c=$(git log --format=%H -1 HEAD)
+
+    setup_mock_p4
+    lg p4 export "$commit_a..$commit_c"
+
+    assert "(( $(wc -l <"$P4_MOCK_LOG") == 3 ))"
+    assert "grep '^info$' $P4_MOCK_LOG"
+    assert "grep '^edit b$' $P4_MOCK_LOG"
+    assert "grep '^add c$' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
+test_lg_p4_export_invalid_commit()
+{
+    lg init
+    echo AAA > a
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    set +e
+    lg p4 dry-export "nonexistent_commit" > out.txt 2>&1
+    local -r rc=$?
+    set -e
+
+    assert "(( rc != 0 ))"
+    assert "grep -q 'not a valid commit' out.txt"
+}
+
+test_lg_p4_export_invalid_commit_in_range()
+{
+    lg init
+    echo AAA > a
+    lg import a
+    echo AAA >> a
+    git commit -am 'edit a'
+
+    local -r valid=$(git log --format=%H -1 HEAD)
+
+    set +e
+    lg p4 dry-export "bogus..$valid" > out.txt 2>&1
+    local -r rc1=$?
+    set -e
+    assert "(( rc1 != 0 ))"
+    assert "grep -q 'not a valid commit: bogus' out.txt"
+
+    set +e
+    lg p4 dry-export "$valid..bogus" > out.txt 2>&1
+    local -r rc2=$?
+    set -e
+    assert "(( rc2 != 0 ))"
+    assert "grep -q 'not a valid commit: bogus' out.txt"
+}
+
 test_lg_apply_edit_not_yet_imported()
 {
     # Create a file and initialize localgit but do NOT import the file.

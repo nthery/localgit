@@ -652,11 +652,34 @@ p4_root()
     echo "$root"
 }
 
+resolve_export_range()
+{
+    if [[ -n "${1:-}" ]]; then
+        if [[ "$1" == *..* ]]; then
+            local left="${1%..*}"
+            local right="${1#*..}"
+            git rev-parse --verify "$left^{commit}" > /dev/null 2>&1 \
+                || error "not a valid commit: $left"
+            git rev-parse --verify "$right^{commit}" > /dev/null 2>&1 \
+                || error "not a valid commit: $right"
+            echo "$1"
+        else
+            git rev-parse --verify "$1^{commit}" > /dev/null 2>&1 \
+                || error "not a valid commit: $1"
+            echo "$1~1..$1"
+        fi
+    else
+        echo "$main_branch..HEAD"
+    fi
+}
+
 emit_p4_export_commands()
 {
     expect_topic
 
-    git diff --find-renames "$main_branch..HEAD" | awk '
+    local -r range="$1"
+
+    git diff --find-renames "$range" | awk '
         function flush() { if (from != "") { print "edit", from; from = to = "" } }
         /^diff/ { flush(); from = substr($3, 3); to = substr($4, 3) }
         /^new file/ { print("add", from); from = to = "" }
@@ -701,7 +724,10 @@ lg_p4_export()
     # shellcheck disable=SC2064
     trap "rm -f '$failed_commands'" EXIT
 
-    emit_p4_export_commands | escape_p4_path | while read -r cmd
+    local range
+    range="$(resolve_export_range "${1:-}")"
+
+    emit_p4_export_commands "$range" | escape_p4_path | while read -r cmd
     do
         # Do not error out as some errors are harmless.
         # When calling repeatedly this command and some files were moved, the corresponding
@@ -728,7 +754,10 @@ commands="${commands}p4 dry-export - display p4 commands that would be executed 
 
 lg_p4_dry_export()
 {
-    emit_p4_export_commands | while read -r cmd
+    local range
+    range="$(resolve_export_range "${1:-}")"
+
+    emit_p4_export_commands "$range" | while read -r cmd
     do
         # Intentionally not quoting variable on next line to pass several arguments to p4.
         # shellcheck disable=SC2086
