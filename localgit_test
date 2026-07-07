@@ -368,10 +368,10 @@ test_lg_p4_dry_export()
     assert "grep '^p4 edit a$' lg_p4_dry_export.out"
     assert "grep '^p4 delete b$' lg_p4_dry_export.out"
     assert "grep '^p4 add c$' lg_p4_dry_export.out"
-    assert "grep '^p4 edit d$' lg_p4_dry_export.out"
-    assert "grep '^p4 move d x$' lg_p4_dry_export.out"
-    assert "grep '^p4 edit e$' lg_p4_dry_export.out"
-    assert "grep '^p4 move e subdir/e$' lg_p4_dry_export.out"
+    assert "grep '^p4 edit -k d$' lg_p4_dry_export.out"
+    assert "grep '^p4 move -k d x$' lg_p4_dry_export.out"
+    assert "grep '^p4 edit -k e$' lg_p4_dry_export.out"
+    assert "grep '^p4 move -k e subdir/e$' lg_p4_dry_export.out"
 }
 
 test_git_stash_lg_import_clean_working_tree()
@@ -542,10 +542,10 @@ test_lg_p4_export()
     assert "grep '^edit a$' $P4_MOCK_LOG"
     assert "grep '^delete b$' $P4_MOCK_LOG"
     assert "grep '^add c$' $P4_MOCK_LOG"
-    assert "grep '^edit d$' $P4_MOCK_LOG"
-    assert "grep '^move d x$' $P4_MOCK_LOG"
-    assert "grep '^edit e$' $P4_MOCK_LOG"
-    assert "grep '^move e subdir/e$' $P4_MOCK_LOG"
+    assert "grep '^edit -k d$' $P4_MOCK_LOG"
+    assert "grep '^move -k d x$' $P4_MOCK_LOG"
+    assert "grep '^edit -k e$' $P4_MOCK_LOG"
+    assert "grep '^move -k e subdir/e$' $P4_MOCK_LOG"
     teardown_mock_p4
 }
 

@@ -684,7 +684,7 @@ emit_p4_export_commands()
         /^diff/ { flush(); from = substr($3, 3); to = substr($4, 3) }
         /^new file/ { print("add", from); from = to = "" }
         /^deleted file/ { print("delete", from); from = to = "" }
-        /^rename from/ { print("edit", from); print("move", from, to); from = to = "" }
+        /^rename from/ { print("edit -k", from); print("move -k", from, to); from = to = "" }
         END { flush() }
         '
 }
