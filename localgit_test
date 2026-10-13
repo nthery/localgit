@@ -1564,5 +1564,76 @@ test_lg_cherry_pick_abbreviation()
     assert "grep -q BBB a"
 }
 
+# Load completion function printed by "lg completion" into current shell.
+load_completion()
+{
+    eval "$(lg completion)"
+}
+
+# Run completion function on words passed as parameters, the last one being
+# completed, and print candidates sorted one per line.
+complete_words()
+{
+    COMP_WORDS=("$@")
+    COMP_CWORD=$(( $# - 1 ))
+    _lg
+    (( ${#COMPREPLY[@]} == 0 )) || printf '%s\n' "${COMPREPLY[@]}" | sort
+}
+
+# Print, sorted and deduplicated one per line, the labels of the case blocks
+# starting at lines matching regex $1 in the localgit script.
+case_labels()
+{
+    sed -n "/$1/,/esac/p" "$lg_bin" \
+        | sed -n 's/^ *\([a-z0-9|-]*\)).*/\1/p' \
+        | tr '|' '\n' | sort -u
+}
+
+test_lg_completion_offers_all_dispatched_commands()
+{
+    load_completion
+    local -r missing="$(comm -23 <(case_labels '^case "\$cmd" in') <(complete_words lg ''))"
+    assert '[[ -z "$missing" ]]'
+}
+
+test_lg_completion_offers_all_p4_subcommands()
+{
+    load_completion
+    local -r missing="$(comm -23 <(case_labels '^    case "\$subcmd" in') <(complete_words lg p4 ''))"
+    assert '[[ -z "$missing" ]]'
+}
+
+test_lg_completion_completes_command_prefix()
+{
+    load_completion
+    assert '[[ "$(complete_words lg p4 dr)" == dry-export ]]'
+    assert '[[ "$(complete_words lg cherry)" == cherry-pick ]]'
+}
+
+test_lg_completion_completes_options()
+{
+    load_completion
+    assert '[[ "$(complete_words lg import -)" == -a ]]'
+    assert '[[ "$(complete_words lg p4 export -)" == -r ]]'
+}
+
+test_lg_completion_completes_files()
+{
+    load_completion
+    touch abc
+    mkdir abdir
+    assert '[[ "$(complete_words lg import ab)" == "$(printf "abc\nabdir")" ]]'
+    assert '[[ "$(complete_words lg p4 import ab)" == abdir ]]'
+}
+
+test_lg_completion_completes_refs_and_ranges()
+{
+    lg init
+    load_completion
+    assert '[[ "$(complete_words lg log d)" == dev ]]'
+    assert '[[ "$(complete_words lg p4 export main..d)" == main..dev ]]'
+    assert '[[ "$(complete_words lg files main...d)" == main...dev ]]'
+}
+
 unset LG_GIT_DIR_PREFIX
 run_tests "$@"

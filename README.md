@@ -13,6 +13,10 @@ another source control system.
     $ git clone https://github.com/nthery/localgit.git
     $ ln -s somewhere/localgit/localgit ~/bin/lg
 
+To enable bash completion, add this to `~/.bashrc`:
+
+    eval "$(lg completion)"
+
 ## Tutorial
 
 First, create local git repo in source tree managed by another SCM.  This repo

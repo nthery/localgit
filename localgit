@@ -906,6 +906,95 @@ lg_p4()
 }
 
 ##############################################################################
+# completion command
+##############################################################################
+
+commands="${commands}completion - print bash completion script, use with: eval \"\$(lg completion)\"\n"
+
+# Complete git ref, or right-hand side of ref range (A..B or A...B), matching
+# prefix $1 into COMPREPLY.
+_lg_complete_refs()
+{
+    local -r cur="$1"
+    local range_prefix=""
+    local ref="$cur"
+    if [[ "$cur" == *..* ]]; then
+        range_prefix="${cur%..*}.."
+        ref="${cur##*..}"
+    fi
+    local refs
+    refs="$(git for-each-ref --format='%(refname:short)' 2>/dev/null)"
+    mapfile -t COMPREPLY < <(compgen -P "$range_prefix" -W "HEAD $refs" -- "$ref")
+}
+
+# Complete file names (or directory names only if $1 is -d) matching prefix $2
+# into COMPREPLY.
+_lg_complete_files()
+{
+    local -r kind="$1"
+    local -r cur="$2"
+    # compopt fails when not called from completion (e.g. from tests).
+    compopt -o filenames 2>/dev/null || true
+    mapfile -t COMPREPLY < <(compgen "$kind" -- "$cur")
+}
+
+# Bash completion function for lg.  It is printed by lg_completion so it must
+# only call functions printed alongside.
+_lg()
+{
+    local -r cur="${COMP_WORDS[COMP_CWORD]}"
+    local -r prev="${COMP_WORDS[COMP_CWORD-1]}"
+    COMPREPLY=()
+
+    if (( COMP_CWORD == 1 )); then
+        mapfile -t COMPREPLY < <(compgen -W "init import i sync status s files f log clone apply a cherry-pick cp p4 help completion" -- "$cur")
+        return
+    fi
+
+    local cmd="${COMP_WORDS[1]}"
+    if [[ "$cmd" == p4 ]]; then
+        if (( COMP_CWORD == 2 )); then
+            mapfile -t COMPREPLY < <(compgen -W "export dry-export import reconcile" -- "$cur")
+            return
+        fi
+        cmd="p4 ${COMP_WORDS[2]}"
+    fi
+
+    # Options are offered only when explicitly started with a dash.
+    local options=""
+    case "$cmd" in
+        init|clone)         options="-n" ;;
+        import|i)           options="-a" ;;
+        cherry-pick|cp)     options="--continue --skip --abort --quit -m --mainline -X --strategy-option --strategy -n -x" ;;
+        "p4 export")        options="-r" ;;
+        "p4 import")        options="-a" ;;
+    esac
+    if [[ "$cur" == -* ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "$options" -- "$cur")
+        return
+    fi
+
+    case "$cmd" in
+        init)
+            ;;
+        clone)
+            [[ "$prev" == -n ]] || _lg_complete_files -f "$cur" ;;
+        import|i|apply|a|"p4 reconcile")
+            _lg_complete_files -f "$cur" ;;
+        "p4 import")
+            _lg_complete_files -d "$cur" ;;
+        log|files|cherry-pick|cp|"p4 export"|"p4 dry-export")
+            _lg_complete_refs "$cur" ;;
+    esac
+}
+
+lg_completion()
+{
+    declare -f _lg _lg_complete_refs _lg_complete_files
+    echo "complete -F _lg lg localgit"
+}
+
+##############################################################################
 # MAIN PROGRAM
 ##############################################################################
 
@@ -915,7 +1004,7 @@ cmd=$1
 shift
 
 case "$cmd" in
-    init|help|clone)
+    init|help|clone|completion)
         # For commands that do not assume an existing repo, force main branch
         # name.
         main_branch="main" ;;
@@ -935,6 +1024,7 @@ case "$cmd" in
     a|apply)    lg_apply "$@" ;;
     cp|cherry-pick) lg_cherry_pick "$@" ;;
     p4)         lg_p4 "$@" ;;
+    completion) lg_completion ;;
     help)       usage ;;
     *)          usage "unknown command: $cmd" ;;
 esac
