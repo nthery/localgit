@@ -835,6 +835,55 @@ lg_p4_import()
     lg_import "${import_opts[@]}" "${to_import[@]}"
 }
 
+commands="${commands}p4 reconcile - import p4 file edited before being imported, keeping local edits uncommitted\n"
+
+# Import into local git the p4 baseline of a file that was edited before being
+# imported and then put back the edited version in the workspace.
+lg_p4_reconcile()
+{
+    (( $# == 1 )) || error "usage: p4 reconcile <file>"
+    local -r file="$1"
+
+    [[ -f "$file" ]] || error "missing file: $file"
+    if git ls-files -- "$file" | grep -q .; then
+        error "file already in local git: $file"
+    fi
+    expect_topic
+
+    local -r p4_file="$(echo "$file" | escape_p4_path)"
+    # Synced files are listed as depot paths.  Anything else is an error
+    # message worth showing.
+    local have_output
+    set +e
+    have_output=$($p4_cmd have "$p4_file" 2>&1)
+    set -e
+    [[ "$have_output" == //* ]] || error "file not synced from p4: $file: $have_output"
+
+    # p4 sync -f does not overwrite opened files.  Opened files are listed as
+    # depot paths whereas unopened ones trigger a "not opened" message.
+    local opened_output
+    set +e
+    opened_output=$($p4_cmd opened "$p4_file" 2>/dev/null)
+    set -e
+    [[ "$opened_output" != //* ]] || error "file opened in p4: $file"
+
+    # Keep backup next to file so that it is easy to find if something fails.
+    local backup
+    backup="$(mktemp "$file.lg-backup.XXXXXX")" || error "cannot create backup file"
+    cp -p "$file" "$backup"
+    echo "backed up $file to $backup"
+
+    tron
+
+    $p4_cmd sync -f "$p4_file#have"
+
+    OPTIND=1
+    lg_import "$file"
+
+    # Move rather than copy as p4 may have made the file read-only.
+    mv -f "$backup" "$file"
+}
+
 lg_p4()
 {
     local -r subcmd="$1"
@@ -848,6 +897,9 @@ lg_p4()
         import)
             shift 1
             lg_p4_import "$@" ;;
+        reconcile)
+            shift 1
+            lg_p4_reconcile "$@" ;;
         *)
             error "unknown or missing subcommand" ;;
     esac

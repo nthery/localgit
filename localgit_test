@@ -481,6 +481,11 @@ elif [[ "$1" == "have" ]]; then
     if [[ -n "$P4_MOCK_HAVE_OUTPUT" && -f "$P4_MOCK_HAVE_OUTPUT" ]]; then
         cat "$P4_MOCK_HAVE_OUTPUT"
     fi
+elif [[ "$1" == "opened" && -n "$P4_MOCK_OPENED" ]]; then
+    echo "//depot/mock/path#1 - edit default change (text)"
+elif [[ "$1" == "sync" && "$2" == "-f" && -n "$P4_MOCK_SYNC_CONTENT" ]]; then
+    # Simulate restoring the have revision of the file.
+    echo "$P4_MOCK_SYNC_CONTENT" > "${3%#have}"
 fi
 MOCK
     chmod +x "$mock_dir/fake_p4"
@@ -490,7 +495,8 @@ MOCK
 
 teardown_mock_p4()
 {
-    unset LG_P4_CMD P4_MOCK_CLIENT_ROOT P4_MOCK_LOG P4_MOCK_HAVE_OUTPUT
+    unset LG_P4_CMD P4_MOCK_CLIENT_ROOT P4_MOCK_LOG P4_MOCK_HAVE_OUTPUT P4_MOCK_SYNC_CONTENT \
+        P4_MOCK_OPENED
 }
 
 write_mock_p4_have()
@@ -1213,6 +1219,125 @@ test_lg_p4_import_multiple_directories()
 
     assert "all_files_in_main | grep -Fx dir1/a"
     assert "all_files_in_main | grep -Fx dir2/b"
+    teardown_mock_p4
+}
+
+test_lg_p4_reconcile_basic()
+{
+    lg init
+    echo AAA > a
+    echo BBB >> a
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/a"
+    export P4_MOCK_SYNC_CONTENT=AAA
+    lg p4 reconcile a
+
+    assert "grep '^opened a$' $P4_MOCK_LOG"
+    assert "grep '^sync -f a#have$' $P4_MOCK_LOG"
+    assert '[[ "$(git show main:a)" == AAA ]]'
+    assert '[[ "$(cat a)" == "$(printf "AAA\nBBB")" ]]'
+    # Local edit left uncommitted.
+    assert '[[ "$(git rev-parse HEAD)" == "$(git rev-parse main)" ]]'
+    assert "git diff | grep '^+BBB'"
+    assert "! ls a.lg-backup.*"
+    teardown_mock_p4
+}
+
+test_lg_p4_reconcile_from_subdirectory()
+{
+    lg init
+    mkdir subdir
+    echo AAA > subdir/a
+    echo BBB >> subdir/a
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/subdir/a"
+    export P4_MOCK_SYNC_CONTENT=AAA
+    pushd subdir
+    lg p4 reconcile a
+    popd
+
+    assert '[[ "$(git show main:subdir/a)" == AAA ]]'
+    assert "git diff | grep '^+BBB'"
+    teardown_mock_p4
+}
+
+test_lg_p4_reconcile_already_in_git()
+{
+    echo AAA > a
+    lg init
+    lg import a
+    echo BBB >> a
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/a"
+    set +e
+    lg p4 reconcile a > reconcile.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "already in local git" reconcile.out'
+    assert "! grep '^sync' $P4_MOCK_LOG"
+    assert "grep BBB a"
+    teardown_mock_p4
+}
+
+test_lg_p4_reconcile_not_in_p4()
+{
+    lg init
+    echo AAA > a
+
+    setup_mock_p4
+    set +e
+    lg p4 reconcile a > reconcile.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "not synced from p4" reconcile.out'
+    assert "! grep '^sync' $P4_MOCK_LOG"
+    teardown_mock_p4
+}
+
+test_lg_p4_reconcile_opened_in_p4()
+{
+    lg init
+    echo AAA > a
+    echo BBB >> a
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/a"
+    export P4_MOCK_OPENED=1
+    set +e
+    lg p4 reconcile a > reconcile.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "file opened in p4" reconcile.out'
+    assert "! grep '^sync' $P4_MOCK_LOG"
+    assert "grep BBB a"
+    assert "! ls a.lg-backup.*"
+    teardown_mock_p4
+}
+
+test_lg_p4_reconcile_bad_arguments()
+{
+    lg init
+
+    setup_mock_p4
+    set +e
+    lg p4 reconcile > reconcile.out 2>&1
+    local rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "usage:" reconcile.out'
+
+    set +e
+    lg p4 reconcile nosuchfile > reconcile.out 2>&1
+    rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "missing file" reconcile.out'
     teardown_mock_p4
 }
 
