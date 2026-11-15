@@ -532,10 +532,10 @@ lg_sync()
 
     tron
 
-    pushd "$(git_root)"
-    # shellcheck disable=SC2046
-    git add $(all_files)
-    popd
+    # Stage changes and deletions of all tracked files, whatever the current
+    # directory.  Unlike passing all files as arguments, this works with any
+    # number of files and any file name.
+    git add -u
 
     git commit -m "$msg"
 }

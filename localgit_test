@@ -333,6 +333,36 @@ test_lg_sync()
     assert "(( $(git show --stat | grep -c 'another_file') == 0 ))"
 }
 
+test_lg_sync_handles_deletions_and_unusual_names()
+{
+    touch 'a b' x.lg.c gone untouched
+    lg init
+    lg import 'a b' x.lg.c gone untouched
+
+    # Simulate foreign update.
+    git checkout main
+    echo AAA > 'a b'
+    echo AAA > x.lg.c
+    rm gone
+    # Untracked files are ignored.
+    touch new
+
+    lg sync
+    assert '[[ "$(git -c core.quotePath=false show --format= --name-status)" == "$(printf "M\ta b\nD\tgone\nM\tx.lg.c")" ]]'
+}
+
+test_lg_sync_more_files_than_arg_max()
+{
+    import_more_files_than_arg_max
+
+    # Simulate foreign update.
+    git checkout main
+    echo AAA > "$arg_max_dir/f00042"
+
+    lg sync
+    assert '[[ "$(git show --format= --name-only)" == "$arg_max_dir/f00042" ]]'
+}
+
 test_lg_p4_dry_export()
 {
     echo AAA > a
@@ -1384,27 +1414,35 @@ test_lg_p4_import_multiple_directories()
     teardown_mock_p4
 }
 
-test_lg_p4_import_more_files_than_arg_max()
+# Helper: create a localgit repo with 15000 files whose paths exceed ARG_MAX
+# and import them with lg p4 import.  Store their directory in global
+# arg_max_dir.
+import_more_files_than_arg_max()
 {
     # Make the paths long enough to exceed ARG_MAX with not too many files.
-    local -r dir="$(printf 'd%.0s' {1..150})"
-    mkdir "$dir"
-    (cd "$dir" && seq -f 'f%05g' 15000 | xargs touch)
+    arg_max_dir="$(printf 'd%.0s' {1..150})"
+    mkdir "$arg_max_dir"
+    (cd "$arg_max_dir" && seq -f 'f%05g' 15000 | xargs touch)
 
     lg init
 
     setup_mock_p4
     P4_MOCK_HAVE_OUTPUT="$(pwd)/p4_have.out"
     export P4_MOCK_HAVE_OUTPUT
-    find "$(pwd)/$dir" -type f | sed 's,^,//depot/mock/path#1 - ,' > "$P4_MOCK_HAVE_OUTPUT"
+    find "$(pwd)/$arg_max_dir" -type f | sed 's,^,//depot/mock/path#1 - ,' > "$P4_MOCK_HAVE_OUTPUT"
     assert '(( $(wc -c < "$P4_MOCK_HAVE_OUTPUT") > $(getconf ARG_MAX) ))'
 
     lg p4 import .
+    teardown_mock_p4
+}
+
+test_lg_p4_import_more_files_than_arg_max()
+{
+    import_more_files_than_arg_max
 
     assert '(( $(all_files_in_main | wc -l) == 15000 ))'
     assert '(( $(git ls-files | wc -l) == 15000 ))'
     assert '[[ -z "$(git status --porcelain -uno)" ]]'
-    teardown_mock_p4
 }
 
 test_lg_p4_import_filters_already_imported_non_ascii_names()
