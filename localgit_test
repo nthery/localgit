@@ -1082,10 +1082,172 @@ test_lg_import_file_committed_on_dev()
     assert "git branch | grep '\* dev'"
 }
 
-# Helper: list all files in main (mirrors all_files in localgit).
+test_lg_import_keeps_mtime_and_makes_writable()
+{
+    lg init
+    echo AAA > a
+    chmod a-w a
+    touch -d 2020-01-01 a
+    local -r mtime_before=$(stat -c %Y a)
+
+    lg import a
+
+    assert '(( $(stat -c %Y a) == mtime_before ))'
+    assert '[[ -w a ]]'
+    assert 'grep -q AAA a'
+    assert '[[ -z "$(git status --porcelain)" ]]'
+}
+
+test_lg_import_does_not_expand_glob_patterns()
+{
+    lg init
+    touch 'a*' ab
+
+    lg import 'a*'
+
+    assert '[[ "$(all_files_in_main)" == "a*" ]]'
+}
+
+test_lg_import_normalizes_paths()
+{
+    lg init
+    touch a
+    mkdir sub
+    touch sub/b
+
+    pushd sub
+    lg import ../a b
+    popd
+    assert '[[ "$(all_files_in_main)" == "$(printf "a\nsub/b")" ]]'
+
+    set +e
+    lg import ./a > lg_import.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "file already baselined: a" lg_import.out'
+}
+
+test_lg_import_handles_non_ascii_names()
+{
+    lg init
+    touch é
+
+    lg import é
+    assert '[[ "$(all_files_in_main)" == é ]]'
+
+    set +e
+    lg import é > lg_import.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "file already baselined: é" lg_import.out'
+}
+
+# Helper: run lg import with arguments $@ expecting failure, saving output in
+# lg_import.out and checking that main and the current branch did not move.
+lg_import_fails_without_state_change()
+{
+    local -r main_before=$(git rev-parse main)
+    local -r head_before=$(git rev-parse HEAD)
+    set +e
+    lg import "$@" > lg_import.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert '[[ "$(git rev-parse main)" == "$main_before" ]]'
+    assert '[[ "$(git rev-parse HEAD)" == "$head_before" ]]'
+    assert "git branch | grep '\* dev'"
+}
+
+test_lg_import_undoes_commit_in_main_when_rebase_fails()
+{
+    lg init
+
+    # Replaying the commit adding file foo conflicts with imported directory
+    # foo.  The pre-check does not detect this.
+    touch foo
+    git add foo
+    git commit -m 'add foo'
+    git rm foo
+    git commit -m 'remove foo'
+    mkdir foo
+    touch foo/bar
+
+    lg_import_fails_without_state_change foo/bar
+    assert 'grep "cannot rebase dev onto main" lg_import.out'
+    assert 'grep "import undone" lg_import.out'
+    assert '! git ls-files --error-unmatch foo/bar'
+}
+
+test_lg_import_rejects_merge_commits_on_topic_branch()
+{
+    lg init
+    touch a
+    lg import a
+
+    git checkout -b side
+    touch b
+    git add b
+    git commit -m 'add b'
+    git checkout dev
+    touch c
+    git add c
+    git commit -m 'add c'
+    git merge --no-edit side
+
+    touch d
+    lg_import_fails_without_state_change d
+    assert "grep \"branch dev has merge commit $(git rev-parse --short HEAD) (Merge branch 'side'\" lg_import.out"
+    assert '! grep "import undone" lg_import.out'
+}
+
+test_lg_import_rejects_files_touched_on_topic_branch()
+{
+    lg init
+
+    echo AAA > a
+    git add a
+    git commit -m 'add a on dev'
+    git rm a
+    git commit -m 'remove a on dev'
+    echo BBB > a
+
+    lg_import_fails_without_state_change a
+    assert "grep \"cannot import a: commit $(git rev-parse --short HEAD) (remove a on dev) on branch dev touches it\" lg_import.out"
+}
+
+test_lg_import_a_rejects_files_touched_on_other_branches()
+{
+    lg init
+
+    git checkout -b other
+    echo AAA > a
+    git add a
+    git commit -m 'add a on other'
+    git checkout dev
+    echo BBB > a
+
+    lg_import_fails_without_state_change -a a
+    assert 'grep "cannot import a: commit .* (add a on other) on branch other touches it" lg_import.out'
+}
+
+test_lg_import_missing_argument()
+{
+    lg init
+
+    set +e
+    lg import > lg_import.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "usage:" lg_import.out'
+}
+
+# Helper: list all files in main unquoted.
 all_files_in_main()
 {
-    git ls-tree --full-tree -r main | awk '{print $4}' | grep -vw .lg
+    git -c core.quotePath=false ls-tree --full-tree -r --name-only main | grep -vw .lg
 }
 
 test_lg_p4_import_basic()
@@ -1220,6 +1382,64 @@ test_lg_p4_import_multiple_directories()
     assert "all_files_in_main | grep -Fx dir1/a"
     assert "all_files_in_main | grep -Fx dir2/b"
     teardown_mock_p4
+}
+
+test_lg_p4_import_more_files_than_arg_max()
+{
+    # Make the paths long enough to exceed ARG_MAX with not too many files.
+    local -r dir="$(printf 'd%.0s' {1..150})"
+    mkdir "$dir"
+    (cd "$dir" && seq -f 'f%05g' 15000 | xargs touch)
+
+    lg init
+
+    setup_mock_p4
+    P4_MOCK_HAVE_OUTPUT="$(pwd)/p4_have.out"
+    export P4_MOCK_HAVE_OUTPUT
+    find "$(pwd)/$dir" -type f | sed 's,^,//depot/mock/path#1 - ,' > "$P4_MOCK_HAVE_OUTPUT"
+    assert '(( $(wc -c < "$P4_MOCK_HAVE_OUTPUT") > $(getconf ARG_MAX) ))'
+
+    lg p4 import .
+
+    assert '(( $(all_files_in_main | wc -l) == 15000 ))'
+    assert '(( $(git ls-files | wc -l) == 15000 ))'
+    assert '[[ -z "$(git status --porcelain -uno)" ]]'
+    teardown_mock_p4
+}
+
+test_lg_p4_import_filters_already_imported_non_ascii_names()
+{
+    touch é b
+
+    lg init
+    lg import é
+
+    setup_mock_p4
+    write_mock_p4_have "$(pwd)/é" "$(pwd)/b"
+    lg p4 import .
+
+    assert '[[ "$(all_files_in_main)" == "$(printf "b\né")" ]]'
+    teardown_mock_p4
+}
+
+test_lg_p4_import_rejects_files_outside_repo()
+{
+    touch a
+    mkdir repo
+    pushd repo
+    lg init
+
+    setup_mock_p4
+    write_mock_p4_have "$(dirname "$(pwd)")/a"
+    set +e
+    lg p4 import . > p4imp.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert 'grep "file not under repo root: .*/a" p4imp.out'
+    assert "git branch | grep '\* dev'"
+    teardown_mock_p4
+    popd
 }
 
 test_lg_p4_reconcile_basic()

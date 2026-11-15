@@ -9,6 +9,8 @@ another source control system.
 
 ## Installation
 
+localgit requires git 2.44 or later.
+
     $ cd somewhere
     $ git clone https://github.com/nthery/localgit.git
     $ ln -s somewhere/localgit/localgit ~/bin/lg
@@ -127,8 +129,9 @@ existing local git repo in this new workspace.
 
 The typical lifecycle looks like this:
 
-1. `lg import` checks out `main`, commits the new file there, then switches
-   back to the topic branch and rebases it onto `main`.
+1. `lg import` commits the new files into `main` and rebases the topic branch
+   onto `main` without touching the working tree: imported files keep their
+   contents and modification time, they are only made writable.
 2. The user edits and commits on the topic branch using regular git commands.
 3. When the foreign SCM is updated, the user checks out `main` and runs
    `lg sync`, which commits all modified tracked files to `main`.

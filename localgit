@@ -100,24 +100,6 @@ all_files()
     git ls-tree --full-tree -r "$main_branch" | awk '{print $4}' | grep -vw .lg
 }
 
-# Wrapper around git rebase that tolerates .git/rebase-merge cleanup failures
-# on NFS.  If the rebase itself succeeded (git prints "Successfully rebased")
-# but the exit code is non-zero, manually remove the leftover directory.
-git_rebase()
-{
-    local output
-    local rc=0
-    output=$(git rebase "$@" 2>&1) || rc=$?
-    echo "$output"
-    if (( rc != 0 )); then
-        if echo "$output" | grep -q "Successfully rebased"; then
-            rm -rf "$(git rev-parse --git-dir)/rebase-merge"
-        else
-            return $rc
-        fi
-    fi
-}
-
 # Print root of git repo.
 git_root() {
     git rev-parse --show-toplevel
@@ -242,92 +224,295 @@ lg_import()
     done
     
     shift $(( OPTIND - 1 ))
-    
-    # Error out if some files do not exist or are already baselined.
-    local f
+
+    (( $# > 0 )) || error "usage: import [-a] <file>..."
+
+    local root
+    root="$(git_root)"
+
+    create_tmp_dir
+    local -r list="$tmp_dir/list"
+    repo_relative_paths "$root" "$@" > "$list"
+    sort_paths "$list"
+
+    import_listed_files "$list" "$rebase_all"
+}
+
+# Create temporary directory removed on exit and store its path in global
+# tmp_dir.
+create_tmp_dir()
+{
+    tmp_dir="$(mktemp -d)" || error "cannot create temporary directory"
+    # We want to expand now rather than at exit-time as exit could be called from caller.
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp_dir'" EXIT
+}
+
+# Sort in place file of paths $1 and remove duplicates.  The collation suits
+# comm(1).
+sort_paths()
+{
+    LC_ALL=C sort -u -o "$1" "$1"
+}
+
+# Print paths of files given as arguments relative to repo root $1.  Error out
+# if a file is missing or not under the repo root.
+repo_relative_paths()
+{
+    local -r root="$1"
+    shift
+
+    local f dir rel
+    local prev_dir="" real_dir=""
     for f in "$@"; do
         [[ -f "$f" ]] || error "missing file: $f"
-        if all_files | grep -q -w "$f"; then
-            error "file already baselined: $f"
+
+        # Resolve only the directory so that symbolic links are imported as is.
+        if [[ "$f" == */* ]]; then
+            dir="${f%/*}"
+            dir="${dir:-/}"
+        else
+            dir=.
         fi
-        if git ls-files "$f" | grep -q .; then
-            error "file already committed on topic branch: $f"
+
+        # Consecutive files are often in the same directory.
+        if [[ "$dir" != "$prev_dir" ]]; then
+            real_dir="$(CDPATH='' cd -- "$dir" && pwd -P)"
+            prev_dir="$dir"
+        fi
+
+        [[ "$real_dir/" == "$root"/* ]] || error "file not under repo root: $f"
+        rel="${real_dir#"$root"}"
+        rel="${rel#/}"
+        echo "${rel:+$rel/}${f##*/}"
+    done
+}
+
+# Convert absolute paths read from stdin into paths relative to repo root $1.
+# Error out if a path is not under the repo root.
+strip_repo_root()
+{
+    LG_ROOT="$1/" LG_PROGNAME="$progname" awk '
+        index($0, ENVIRON["LG_ROOT"]) == 1 {
+            print substr($0, length(ENVIRON["LG_ROOT"]) + 1)
+            next
+        }
+        {
+            print ENVIRON["LG_PROGNAME"] ": file not under repo root: " $0 > "/dev/stderr"
+            exit 1
+        }'
+}
+
+# Print sorted paths of files in main branch.
+main_branch_paths()
+{
+    # ls-tree -r lists files in the tree of a commit.  -z disables quoting of
+    # unusual (e.g. non-ASCII) names.
+    git ls-tree -r -z --full-tree --name-only "$main_branch" | tr '\0' '\n' | LC_ALL=C sort
+}
+
+# Print sorted paths of files in index.
+index_paths()
+{
+    # ls-files lists index entries under the current directory only, hence -C.
+    git -C "$(git_root)" ls-files -z | tr '\0' '\n' | LC_ALL=C sort
+}
+
+# Error out if some files listed in $1 are missing or already in main or topic
+# branch.
+check_importable()
+{
+    local -r list="$1"
+
+    local -r root="$(git_root)"
+    local f
+    while IFS= read -r f; do
+        [[ -f "$root/$f" ]] || error "missing file: $f"
+    done < "$list"
+
+    f="$(LC_ALL=C comm -12 "$list" <(main_branch_paths) | head -n 1)"
+    [[ -z "$f" ]] || error "file already baselined: $f"
+
+    f="$(LC_ALL=C comm -12 "$list" <(index_paths) | head -n 1)"
+    [[ -z "$f" ]] || error "file already committed on topic branch: $f"
+}
+
+# Error out if git replay cannot rebase onto main branch the branches named on
+# stdin once files listed in $1 are imported.  As imported files are absent
+# from these branches, this happens only when a branch has merge commits,
+# which git replay does not support, or when a commit of a branch touches an
+# imported file.
+check_replayable()
+{
+    local -r list="$1"
+
+    local branch range merge f
+    while IFS= read -r branch; do
+        range="refs/heads/$main_branch..refs/heads/$branch"
+
+        # --min-parents=2 selects merge commits.
+        merge="$(git rev-list --min-parents=2 -n 1 "$range")"
+        if [[ -n "$merge" ]]; then
+            error "cannot import: branch $branch has merge commit" \
+                "$(git log -n 1 --format='%h (%s)' "$merge"), which git replay" \
+                "cannot rebase; flatten it first, e.g. with 'git rebase $main_branch'"
+        fi
+
+        # --name-only lists paths touched by each commit.  --no-renames counts
+        # a rename as touching both names.
+        f="$(LC_ALL=C comm -12 "$list" \
+            <(git log --no-renames --format= --name-only -z "$range" | tr '\0' '\n' | LC_ALL=C sort -u) |
+            head -n 1)"
+        if [[ -n "$f" ]]; then
+            error "cannot import $f: commit" \
+                "$(git --literal-pathspecs log -n 1 --format='%h (%s)' "$range" -- "$f")" \
+                "on branch $branch touches it"
         fi
     done
+}
 
-    # Error out if some files are not descendants of the repo root.
-    local -r root_pattern="$(git_root)/*"
-    for f in "$@"; do
-        # Intentionally not quoting variables on next line to trigger pattern matching.
-        # shellcheck disable=SC2053
-        if [[ $(xrealpath "$f") != $root_pattern ]]; then
-            error "file not under repo root: $f"
-        fi
-    done
+# Print commit log for importing files listed in $1.  It fits in 80 columns.
+import_log()
+{
+    local -r list="$1"
 
-    expect_topic
+    local -r max=$(( 80 - 3 ))
+    local log="lg: import"
+    local f
+    while IFS= read -r f && (( ${#log} <= max )); do
+        log="$log $f"
+    done < "$list"
 
-    local -r topic=$(current_branch)
-
-    local log="lg: import $*"
-
-    # If commit log too long to fit in 80 columns, first strip directories.
-    if (( ${#log} > (80 - 3) )); then
+    # If too long, first strip directories.
+    if (( ${#log} > max )); then
         log="lg: import"
-        for f in "$@"; do
-            log="$log $(basename "$f")"
-        done
+        while IFS= read -r f && (( ${#log} <= max )); do
+            log="$log ${f##*/}"
+        done < "$list"
     fi
 
-    # If log still too long, truncate it.
-    if (( ${#log} > (80 - 3) )); then
+    # If still too long, truncate.
+    if (( ${#log} > max )); then
         log="${log:0:76}..."
     fi
 
+    echo "$log"
+}
+
+# Add files listed in $1 to the index, whatever the ignore rules.  The index
+# is the one selected by GIT_INDEX_FILE if set.
+add_listed_files()
+{
+    # update-index --add stores the contents of the files as blobs in the object
+    # database and records them in the index.  Unlike git add, it does not
+    # match paths as pathspecs, which is much faster with many files.
+    tr '\n' '\0' < "$1" | git -C "$(git_root)" update-index --add -z --stdin
+}
+
+# Commit files listed in $1 into main branch with log $2, leaving HEAD, index
+# and working tree untouched.
+commit_to_main()
+{
+    local -r list="$1"
+    local -r log="$2"
+
+    # Build the new tree in a scratch index initialized from main (read-tree).
+    local -r index="$tmp_dir/index"
+    GIT_INDEX_FILE="$index" git read-tree "$main_branch"
+    GIT_INDEX_FILE="$index" add_listed_files "$list"
+
+    local tree commit
+    # write-tree stores the scratch index as a tree object and prints its id.
+    tree="$(GIT_INDEX_FILE="$index" git write-tree)"
+    # commit-tree creates a commit of this tree on top of main without moving
+    # any branch.
+    commit="$(git commit-tree "$tree" -p "$main_branch" -m "$log")"
+    # Move main to the new commit, failing if main moved in the meantime
+    # (the last argument is the expected current value).
+    git update-ref "refs/heads/$main_branch" "$commit" "$(git rev-parse "$main_branch")"
+}
+
+# Print names of branches to rebase onto main branch: all of them if $1 is 1,
+# the current one otherwise.
+branches_to_rebase()
+{
+    if (( $1 )); then
+        # for-each-ref lists local branches.  lstrip=2 drops "refs/heads/".
+        git for-each-ref --format='%(refname:lstrip=2)' refs/heads/ | grep -vxF "$main_branch"
+    else
+        current_branch
+    fi
+}
+
+# Rebase branches named on stdin onto main branch without touching index nor
+# working tree.  Either all branches are rebased or none.  Return non-zero on
+# failure.
+replay_onto_main()
+{
+    local -r main_ref="refs/heads/$main_branch"
+
+    # Collect "update <ref> <new commit> <expected old commit>" commands.
+    local branch ref updates="" update
+    while IFS= read -r branch; do
+        ref="refs/heads/$branch"
+        # rev-list main..branch lists commits on branch that are not in main.
+        if [[ -z "$(git rev-list -n 1 "$main_ref..$ref")" ]]; then
+            # Nothing to replay so fast-forward to main.  git replay rejects
+            # empty ranges.  rev-parse prints the commit a ref points to.
+            update="update $ref $(git rev-parse "$main_ref") $(git rev-parse "$ref")"
+        # replay recreates commits main..branch on top of main and prints the
+        # update command for branch, without touching any ref, HEAD, index or
+        # working tree.
+        elif ! update="$(git replay --onto "$main_ref" "$main_ref..$ref")"; then
+            echo 1>&2 "$progname: cannot rebase $branch onto $main_branch"
+            return 1
+        fi
+        updates="$updates$update"$'\n'
+    done
+
+    # update-ref --stdin applies all updates in a single transaction: if one
+    # fails (e.g. a branch moved in the meantime), no branch moves.
+    printf '%s' "$updates" | git update-ref --stdin
+}
+
+# Make owner-writable files listed in $1, leaving their modification time
+# untouched.
+make_writable()
+{
+    tr '\n' '\0' < "$1" | (cd "$(git_root)" && xargs -0 chmod u+w --)
+}
+
+# Commit files listed in $1 into main branch and rebase onto it the current
+# branch, or all branches if $2 is 1.  Neither changes in index and working
+# tree nor contents and modification time of imported files are touched.
+# The list holds paths relative to repo root sorted with sort_paths.
+import_listed_files()
+{
+    local -r list="$1"
+    local -r rebase_all="$2"
+
+    check_importable "$list"
+    expect_topic
+    check_replayable "$list" < <(branches_to_rebase "$rebase_all")
+
+    local -r log="$(import_log "$list")"
+    local -r old_main="$(git rev-parse "$main_branch")"
+
     tron
 
-    local must_unstash
-    must_unstash=0
-    if ! git diff-index --quiet HEAD; then
-        git stash push -m "lg-import: $*"
-        must_unstash=1
+    commit_to_main "$list" "$log"
+
+    if ! replay_onto_main < <(branches_to_rebase "$rebase_all"); then
+        # No branch moved so moving main back undoes the import.  The new
+        # commit becomes unreachable and is eventually garbage collected.
+        git update-ref "refs/heads/$main_branch" "$old_main"
+        error "import undone"
     fi
 
-    git checkout "$main_branch"
+    # HEAD moved to a commit containing the imported files.
+    add_listed_files "$list"
 
-    git add -f "$@"
-
-    # TODO: Sometimes the detection of files already baselined fails because
-    # it is flawed: it greps a sequence of repo-relative paths against an
-    # arbitrary path that may for example contain '..'.
-    # Work around this for the time being by absorbing the "nothing to commit"
-    # error to avoid bailing out while in main.
-    local commit_output
-    local commit_rc=0
-    commit_output=$(git commit -m "$log" 2>&1) || commit_rc=$?
-    if (( commit_rc != 0 )); then
-        if ! echo "$commit_output" | grep -q "nothing to commit"; then
-            echo "$commit_output" >&2
-            return $commit_rc
-        fi
-    fi
-
-    if (( rebase_all )); then
-        while IFS= read -r branch; do
-            echo "Rebasing branch: $branch"
-            git checkout "$branch"
-            git_rebase "$main_branch"
-        done < <(git for-each-ref --format='%(refname:short)' refs/heads/ | grep -v "^${main_branch}$")
-
-        git checkout "$topic"
-    else
-        git checkout "$topic"
-        git_rebase "$main_branch"
-    fi
-
-    if (( must_unstash )); then
-        git stash pop --index
-    fi
+    make_writable "$list"
 }
 
 ##############################################################################
@@ -769,12 +954,12 @@ commands="${commands}p4 import  - import all p4 files under directories into loc
 
 lg_p4_import()
 {
-    local -a import_opts=()
+    local rebase_all=0
     local opt
     OPTIND=1
     while getopts ":a" opt; do
         case $opt in
-            a) import_opts+=("-a") ;;
+            a) rebase_all=1 ;;
             :) error "option $OPTARG: missing argument" ;;
             *) error "bad option: $OPTARG" ;;
         esac
@@ -787,52 +972,34 @@ lg_p4_import()
         [[ -d "$dir" ]] || error "directory not found: $dir"
     done
 
+    local root
+    root="$(git_root)"
+
+    create_tmp_dir
+    local -r synced="$tmp_dir/synced"
+    local -r list="$tmp_dir/list"
+
     # p4 have output format: //depot/path/file#rev - /local/path/file
-    local -a local_paths=()
+    # Depot paths cannot contain '#' so the first one separates them from revisions.
     for dir in "$@"; do
-        local abs_dir
-        abs_dir="$(xrealpath "$dir")"
+        # p4 fails when there is no synced file.
+        $p4_cmd have "$(xrealpath "$dir")/..." 2>/dev/null || true
+    done | sed -n 's/^[^#]*#[0-9]* - //p' | strip_repo_root "$root" > "$synced"
+    sort_paths "$synced"
 
-        local have_output
-        set +e
-        have_output=$($p4_cmd have "$abs_dir/..." 2>/dev/null)
-        set -e
-
-        if [[ -n "$have_output" ]]; then
-            while IFS= read -r line; do
-                local_paths+=("${line##* - }")
-            done <<< "$have_output"
-        fi
-    done
-
-    if (( ${#local_paths[@]} == 0 )); then
+    if [[ ! -s "$synced" ]]; then
         echo "no files synced under specified directories"
         return 0
     fi
 
-    local -r root="$(git_root)"
-    local tracked_files
-    tracked_files=$(all_files || true)
+    LC_ALL=C comm -23 "$synced" <(main_branch_paths) > "$list"
 
-    # Filter out files already in main branch.
-    # lg_import's own "already baselined" check uses repo-relative paths and
-    # would not match the absolute paths we pass, so we must pre-filter here.
-    local -a to_import=()
-    for p in "${local_paths[@]}"; do
-        local rel="${p#"$root"/}"
-        if ! echo "$tracked_files" | grep -q -Fx "$rel"; then
-            to_import+=("$p")
-        fi
-    done
-
-    if (( ${#to_import[@]} == 0 )); then
+    if [[ ! -s "$list" ]]; then
         echo "all files already imported"
         return 0
     fi
 
-    # Reset OPTIND so lg_import's getopts starts from the right position.
-    OPTIND=1
-    lg_import "${import_opts[@]}" "${to_import[@]}"
+    import_listed_files "$list" "$rebase_all"
 }
 
 commands="${commands}p4 reconcile - import p4 file edited before being imported, keeping local edits uncommitted\n"
