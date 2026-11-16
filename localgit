@@ -105,16 +105,42 @@ git_root() {
     git rev-parse --show-toplevel
 }
 
-start_non_local_git_root_creation()
+# Print the git directory to create for the repo named $1 given the value $2
+# of the -d option, which wins over LG_GIT_DIR_PREFIX.  Print nothing for a
+# .git directory in the workspace.  Throw on error.
+git_dir_to_create()
 {
     local -r name="$1"
+    local -r git_dir_opt="$2"
 
-    if [[ -n "$LG_GIT_DIR_PREFIX" ]]; then
+    if [[ -n "$git_dir_opt" ]]; then
+        echo "$git_dir_opt"
+    elif [[ -n "$LG_GIT_DIR_PREFIX" ]]; then
         [[ -d "$LG_GIT_DIR_PREFIX" ]] || error "directory not found: $LG_GIT_DIR_PREFIX"
-        local -r git_dir="$LG_GIT_DIR_PREFIX/${name}.git"
-        [[ ! -d "$git_dir" ]] || error "directory already exists: $git_dir"
-        pushd "$LG_GIT_DIR_PREFIX"
+        echo "$LG_GIT_DIR_PREFIX/${name}.git"
     fi
+}
+
+# Create in the current directory an empty git repo whose initial branch is
+# main.  Its git directory is $1, whose missing parents are created, or a .git
+# directory in the workspace if $1 is empty.  Throw on error.
+init_git_repo()
+{
+    local -r git_dir="$1"
+
+    [[ ! -e .git ]] || error ".git already exists"
+
+    if [[ -z "$git_dir" ]]; then
+        git init --initial-branch=main
+        return
+    fi
+
+    [[ ! -e "$git_dir" ]] || error "directory already exists: $git_dir"
+    mkdir -p "$(dirname "$git_dir")"
+    # This leaves in the workspace a .git file pointing to the git directory.
+    git init --initial-branch=main --separate-git-dir "$git_dir"
+    # Let git commands given only the git directory find the workspace.
+    git config core.worktree "$(pwd)"
 }
 
 # macOS does not have realpath(1) so emulate it.
@@ -148,19 +174,6 @@ xrealpath()
     fi
 }
 
-complete_non_local_git_root_creation()
-{
-    local -r name="$1"
-
-    if [[ -n "$LG_GIT_DIR_PREFIX" ]]; then
-        mv .git "${name}.git"
-        popd
-        local -r git_dir="$LG_GIT_DIR_PREFIX/${name}.git"
-        git --git-dir "$git_dir" config core.worktree "$(pwd)"
-        echo "gitdir: $(xrealpath "$git_dir")" > .git
-    fi
-}
-
 parent_dir()
 {
     basename "$(pwd)"
@@ -170,16 +183,17 @@ parent_dir()
 # init command
 ##############################################################################
 
-commands="${commands}init - create local git\n"
+commands="${commands}init [-n name | -d gitdir] - create local git\n"
 
 lg_init()
 {
     local opt
-    local name
-    name="$(parent_dir)"
-    while getopts ":r:n:" opt; do
+    local name=""
+    local git_dir_opt=""
+    while getopts ":n:d:" opt; do
         case $opt in
             n) name="$OPTARG" ;;
+            d) git_dir_opt="$OPTARG" ;;
             :) error "option $OPTARG: missing argument" ;;
             *) error "bad option: $OPTARG" ;;
         esac
@@ -187,19 +201,19 @@ lg_init()
 
     shift $(( OPTIND - 1 ))
 
-    [[ ! -r .git ]] || error ".git already exists"
+    [[ -z "$name" || -z "$git_dir_opt" ]] || error "options -n and -d are mutually exclusive"
+    [[ -n "$name" ]] || name="$(parent_dir)"
 
-    start_non_local_git_root_creation "$name"
+    local git_dir
+    git_dir="$(git_dir_to_create "$name" "$git_dir_opt")"
 
     tron
 
-    git init --initial-branch=main
+    init_git_repo "$git_dir"
 
     # Create dummy initial commit.
     # Failing this initial lg-import from orphan topic branch fails.
     git commit --allow-empty -m 'lg: big bang'
-
-    complete_non_local_git_root_creation "$name"
 
     # Switch to topic branch.
     git checkout -b dev
@@ -621,15 +635,15 @@ lg_clone()
 
     shift $(( OPTIND - 1 ))
 
-    local -r src="$(src_git_dir "$1")"
+    local src
+    src="$(src_git_dir "$1")"
 
-    start_non_local_git_root_creation "$name"
+    local git_dir
+    git_dir="$(git_dir_to_create "$name" "")"
 
     tron
 
-    git init --initial-branch="main"
-
-    complete_non_local_git_root_creation "$name"
+    init_git_repo "$git_dir"
 
     git remote add origin "$src"
     git fetch
@@ -1130,7 +1144,8 @@ _lg()
     # Options are offered only when explicitly started with a dash.
     local options=""
     case "$cmd" in
-        init|clone)         options="-n" ;;
+        init)               options="-n -d" ;;
+        clone)              options="-n" ;;
         import|i)           options="-a" ;;
         cherry-pick|cp)     options="--continue --skip --abort --quit -m --mainline -X --strategy-option --strategy -n -x" ;;
         "p4 export")        options="-r" ;;
@@ -1143,7 +1158,7 @@ _lg()
 
     case "$cmd" in
         init)
-            ;;
+            [[ "$prev" != -d ]] || _lg_complete_files -d "$cur" ;;
         clone)
             [[ "$prev" == -n ]] || _lg_complete_files -f "$cur" ;;
         import|i|apply|a|"p4 reconcile")

@@ -71,6 +71,73 @@ test_lg_init_resolves_chained_symlinks_in_prefix()
     assert "git log --oneline | grep 'lg: big bang'"
 }
 
+test_lg_init_fails_when_prefix_dir_missing()
+{
+    export LG_GIT_DIR_PREFIX=../missing_prefix
+    set +e
+    lg init > lg_init.out 2>&1
+    local -r rc=$?
+    set -e
+    unset LG_GIT_DIR_PREFIX
+    assert '(( rc != 0 ))'
+    assert "grep -q 'directory not found' lg_init.out"
+    assert "[[ ! -e .git ]]"
+}
+
+test_lg_init_opt_d_creates_git_dir_and_missing_parents_at_absolute_path()
+{
+    local -r git_dir="$(cd .. && pwd)/opt_d_abs/nested/foo.git"
+    lg init -d "$git_dir"
+    assert "[[ -f .git ]]"
+    assert "[[ -d $git_dir ]]"
+    assert "grep -q 'opt_d_abs/nested/foo.git' .git"
+    assert '[[ "$(git --git-dir "$git_dir" config core.worktree)" == "$(pwd)" ]]'
+    assert "git log --oneline | grep 'lg: big bang'"
+    assert "git branch | grep '\* dev'"
+}
+
+test_lg_init_opt_d_accepts_relative_path()
+{
+    lg init -d ../opt_d_rel/foo
+    assert "[[ -f .git ]]"
+    assert "[[ -d ../opt_d_rel/foo ]]"
+    assert "grep -q 'opt_d_rel/foo$' .git"
+    assert "git log --oneline | grep 'lg: big bang'"
+}
+
+test_lg_init_opt_d_overrides_prefix_env_var()
+{
+    export LG_GIT_DIR_PREFIX=../backup
+    lg init -d ../opt_d_over.git
+    unset LG_GIT_DIR_PREFIX
+    assert "[[ -d ../opt_d_over.git ]]"
+    assert "[[ ! -e ../backup/$test_name.git ]]"
+}
+
+test_lg_init_opt_d_fails_when_git_dir_exists()
+{
+    mkdir ../opt_d_exists.git
+    set +e
+    lg init -d ../opt_d_exists.git > lg_init.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert "grep -q 'already exists' lg_init.out"
+    assert "[[ ! -e .git ]]"
+}
+
+test_lg_init_rejects_opt_n_with_opt_d()
+{
+    set +e
+    lg init -n foo -d ../opt_n_d.git > lg_init.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert "grep -q 'mutually exclusive' lg_init.out"
+    assert "[[ ! -e .git ]]"
+    assert "[[ ! -e ../opt_n_d.git ]]"
+}
+
 test_create_original_clones()
 {
     mkdir ../original_clone_with_local_git_dir
@@ -132,6 +199,17 @@ test_lg_clone_ignores_opt_n_when_prefix_env_var_unset()
 
     assert "[[ -d .git ]]"
     assert "git diff main^..main | grep '^diff --git a/a'"
+}
+
+test_lg_clone_fails_when_source_missing()
+{
+    set +e
+    lg clone ../missing_source/.git > lg_clone.out 2>&1
+    local -r rc=$?
+    set -e
+    assert '(( rc != 0 ))'
+    assert "grep -q 'source git repo does not exist' lg_clone.out"
+    assert "[[ ! -e .git ]]"
 }
 
 test_lg_import_creates_commit_in_main()
@@ -1873,6 +1951,7 @@ test_lg_completion_completes_options()
     load_completion
     assert '[[ "$(complete_words lg import -)" == -a ]]'
     assert '[[ "$(complete_words lg p4 export -)" == -r ]]'
+    assert '[[ "$(complete_words lg init -)" == "$(printf -- "-d\n-n")" ]]'
 }
 
 test_lg_completion_completes_files()
@@ -1882,6 +1961,8 @@ test_lg_completion_completes_files()
     mkdir abdir
     assert '[[ "$(complete_words lg import ab)" == "$(printf "abc\nabdir")" ]]'
     assert '[[ "$(complete_words lg p4 import ab)" == abdir ]]'
+    assert '[[ "$(complete_words lg init -d ab)" == abdir ]]'
+    assert '[[ -z "$(complete_words lg init ab)" ]]'
 }
 
 test_lg_completion_completes_refs_and_ranges()

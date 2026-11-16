@@ -94,7 +94,7 @@ existing local git repo in this new workspace.
 
 | Command | Description |
 |---------|-------------|
-| `init` | Create a local git repo with a `dev` topic branch. |
+| `init` | Create a local git repo with a `dev` topic branch.  `-d GITDIR` stores the git directory at `GITDIR` (missing parent directories are created) instead of in the workspace; it wins over `LG_GIT_DIR_PREFIX`.  `-n NAME` names the git directory under `LG_GIT_DIR_PREFIX`. |
 | `import` / `i` | Add file(s) to the local git.  `-a` rebases all topic branches. |
 | `sync` | After pulling from the foreign SCM (while on `main`), commit all modified tracked files. |
 | `clone` | Clone an existing localgit repo into another workspace. |
@@ -114,7 +114,9 @@ existing local git repo in this new workspace.
   directory under this prefix (e.g. `$LG_GIT_DIR_PREFIX/<name>.git`) instead of
   in the workspace.  A `.git` *file* containing a `gitdir:` line is left in the
   workspace as a git-level symbolic link pointing to the real location.  This is
-  useful to keep the workspace clean for the foreign SCM.
+  useful to keep the workspace clean for the foreign SCM.  The `<name>`
+  defaults to the workspace directory name and can be set with `-n`.  `init -d`
+  ignores this variable.
 
 ## Under the hood
 
