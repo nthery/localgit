@@ -1849,6 +1849,64 @@ test_lg_cherry_pick_range()
     assert "grep -q YYY b"
 }
 
+test_lg_cherry_pick_modifies_file_added_on_topic()
+{
+    lg init
+
+    # c is added on the topic branch, then modified on another branch.
+    echo CCC > c
+    git add c && git commit -m 'add c'
+    git checkout -b other
+    echo DDD >> c
+    git commit -am 'modify c'
+    git checkout dev
+
+    local -r main_before=$(git rev-parse main)
+
+    lg cherry-pick dev..other
+
+    # c needs no import.
+    assert '[[ "$(git rev-parse main)" == "$main_before" ]]'
+    assert "grep -q DDD c"
+}
+
+test_lg_cherry_pick_imports_only_untracked_files()
+{
+    # a is in the workspace but not yet tracked by localgit.
+    echo AAA > a
+    lg init
+
+    # c is added on the topic branch.
+    echo CCC > c
+    git add c && git commit -m 'add c'
+
+    # Create a remote repo where a and c are modified on a dev branch.
+    mkdir ../cp_remote7
+    pushd ../cp_remote7
+    git init --initial-branch=main
+    echo AAA > a
+    echo CCC > c
+    git add a c && git commit -m 'baseline'
+    git checkout -b dev
+    echo BBB >> a
+    echo DDD >> c
+    git add a c && git commit -m 'modify a and c'
+    popd
+
+    git remote add other ../cp_remote7
+    git fetch other
+
+    lg cherry-pick other/main..other/dev
+
+    # a is imported but not c.
+    assert "all_files_in_main | grep -qFx a"
+    assert "! all_files_in_main | grep -qFx c"
+
+    # Both changes should be applied.
+    assert "grep -q BBB a"
+    assert "grep -q DDD c"
+}
+
 test_lg_cherry_pick_on_main_branch_errors()
 {
     echo AAA > a

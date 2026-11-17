@@ -332,6 +332,12 @@ index_paths()
     git -C "$(git_root)" ls-files -z | tr '\0' '\n' | LC_ALL=C sort
 }
 
+# Print sorted paths of files tracked by git, i.e. in main branch or index.
+tracked_paths()
+{
+    LC_ALL=C sort -u <(main_branch_paths) <(index_paths)
+}
+
 # Error out if some files listed in $1 are missing or already in main or topic
 # branch.
 check_importable()
@@ -739,42 +745,35 @@ lg_apply()
 
 commands="${commands}cherry-pick - cherry-pick commits, importing files as needed\n"
 
+# Print sorted paths of files that commits selected by "$@" expect to exist
+# beforehand, i.e. all touched files but added ones and, for renames, the old
+# name only.
+cherry_pick_preexisting_paths()
+{
+    # git outputs status as A, R100, M, etc. (with similarity score for renames).
+    git log --name-status --pretty=format:'' "$@" -- |
+        awk -F'\t' '$1 != "" && $1 !~ /^A/ { print $2 }' |
+        LC_ALL=C sort -u
+}
+
+# Import files needed by commits selected by "$@" that are in the workspace but
+# neither in main branch nor in index.
 cherry_pick_import_files()
 {
+    local -r untracked="$(LC_ALL=C comm -23 \
+        <(cherry_pick_preexisting_paths "$@") <(tracked_paths))"
+
     local -a files_to_import=()
-    local tracked_files
-    tracked_files=$(all_files || true)
+    local f
+    while IFS= read -r f; do
+        if [[ -f "$f" ]]; then
+            files_to_import+=("$f")
+        fi
+    done <<< "$untracked"
 
-    # shellcheck disable=SC2034
-    while IFS=$'\t' read -r status old_file new_file; do
-        [[ -n "$status" ]] || continue
-        # git outputs status as A, R100, M, etc. (with similarity score for renames).
-        case "$status" in
-            A*)  ;;  # Added: new file, no import needed
-            R*)      # Renamed: import the old name
-                if ! echo "$tracked_files" | grep -qFx "$old_file"; then
-                    [[ -f "$old_file" ]] && files_to_import+=("$old_file")
-                fi
-                ;;
-            *)
-                if ! echo "$tracked_files" | grep -qFx "$old_file"; then
-                    [[ -f "$old_file" ]] && files_to_import+=("$old_file")
-                fi
-                ;;
-        esac
-    done < <(git log --name-status --pretty=format:'' "$@" --)
-
-    # De-duplicate.
-    local -a unique_files=()
     if (( ${#files_to_import[@]} > 0 )); then
-        while IFS= read -r f; do
-            unique_files+=("$f")
-        done < <(printf '%s\n' "${files_to_import[@]}" | sort -u)
-    fi
-
-    if (( ${#unique_files[@]} > 0 )); then
         OPTIND=1
-        lg_import "${unique_files[@]}"
+        lg_import "${files_to_import[@]}"
     fi
 }
 
