@@ -1907,6 +1907,38 @@ test_lg_cherry_pick_imports_only_untracked_files()
     assert "grep -q DDD c"
 }
 
+test_lg_cherry_pick_single_commit_ignores_ancestors()
+{
+    # a and b are in the workspace but not yet tracked by localgit.
+    echo AAA > a
+    echo XXX > b
+    lg init
+
+    # Create a remote repo where b then a are modified on a dev branch.
+    mkdir ../cp_remote8
+    pushd ../cp_remote8
+    git init --initial-branch=main
+    echo AAA > a
+    echo XXX > b
+    git add a b && git commit -m 'baseline'
+    git checkout -b dev
+    echo YYY >> b
+    git add b && git commit -m 'modify b'
+    echo BBB >> a
+    git add a && git commit -m 'modify a'
+    popd
+
+    git remote add other ../cp_remote8
+    git fetch other
+
+    lg cherry-pick other/dev
+
+    # Only the file touched by the picked commit is imported.
+    assert "all_files_in_main | grep -qFx a"
+    assert "! all_files_in_main | grep -qFx b"
+    assert "grep -q BBB a"
+}
+
 test_lg_cherry_pick_on_main_branch_errors()
 {
     echo AAA > a

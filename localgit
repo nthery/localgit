@@ -750,8 +750,10 @@ commands="${commands}cherry-pick - cherry-pick commits, importing files as neede
 # name only.
 cherry_pick_preexisting_paths()
 {
-    # git outputs status as A, R100, M, etc. (with similarity score for renames).
-    git log --name-status --pretty=format:'' "$@" -- |
+    # Like git cherry-pick, --no-walk selects single commits without their
+    # ancestors but still expands ranges.  git outputs status as A, R100, M,
+    # etc. (with similarity score for renames).
+    git log --no-walk --name-status --pretty=format:'' "$@" -- |
         awk -F'\t' '$1 != "" && $1 !~ /^A/ { print $2 }' |
         LC_ALL=C sort -u
 }
